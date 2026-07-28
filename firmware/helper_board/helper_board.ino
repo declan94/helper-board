@@ -14,6 +14,7 @@
 
 // KEY 切页后的临时页面;-1 表示跟随时段默认页。定时唤醒时清除。
 RTC_DATA_ATTR static int8_t sPageOverride = -1;
+RTC_DATA_ATTR static uint32_t sWakeCount = 0;  // 唤醒计数(诊断用,断电清零)
 
 static DisplayPort *display = NULL;
 
@@ -45,7 +46,8 @@ static uint32_t secondsToNextWake(time_t now, bool timeValid) {
 void setup() {
   Serial.begin(115200);
   WakeCause wake = Power_GetWakeCause();  // 尽早调用:长按判定从唤醒瞬间计时
-  log_i("wake cause: %d", wake);
+  sWakeCount++;
+  log_i("wake cause: %d, count: %u", wake, sWakeCount);
 
   setenv("TZ", TZ_STRING, 1);
   tzset();
@@ -131,7 +133,11 @@ void setup() {
   }
   m.page = (sPageOverride >= 0) ? (MenuPage)sPageOverride : defaultPage;
 
-  // ---- 采集电量 ----
+  // ---- 采集电量与诊断标记 ----
+  static const char WAKE_LETTER[] = { 'C', 'T', 'K', 'L' };  // 对应 WakeCause 枚举
+  pinMode(PIN_KEY, INPUT_PULLUP);
+  snprintf(m.wakeTag, sizeof(m.wakeTag), "%c%u k%d", WAKE_LETTER[wake], sWakeCount,
+           digitalRead(PIN_KEY));  // k0=渲染瞬间 KEY 按下,验证按键通断
   m.batt = Battery_Read();
   log_i("batt=%.2fV %d%% page=%d", m.batt.voltage, m.batt.percent, (int)m.page);
 

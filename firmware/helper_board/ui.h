@@ -8,6 +8,7 @@
 typedef struct {
   struct tm now;
   bool timeValid;
+  char wakeTag[12];  // 唤醒诊断:C=冷启 T=定时 K=按键 L=长按 + 计数 + KEY电平,如 "T12 k1"
   BatteryState batt;
   MenuData menu;
   MenuPage page;

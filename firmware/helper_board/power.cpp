@@ -15,6 +15,7 @@ WakeCause Power_GetWakeCause() {
   switch (cause) {
     case ESP_SLEEP_WAKEUP_TIMER:
       return WAKE_TIMER;
+    case ESP_SLEEP_WAKEUP_EXT0:
     case ESP_SLEEP_WAKEUP_EXT1: {
       // 区分长短按:等待松开,超过阈值即长按
       pinMode(PIN_KEY, INPUT_PULLUP);
@@ -40,11 +41,24 @@ void Power_DeepSleep(uint32_t seconds) {
   for (int pin : lcdPins) gpio_hold_en((gpio_num_t)pin);
   gpio_deep_sleep_hold_en();
 
-  // KEY 低电平唤醒(EXT1),启用 RTC 域内部上拉兜底
-  rtc_gpio_pullup_en((gpio_num_t)PIN_KEY);
-  rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY);
+  // KEY 低电平唤醒:EXT0 单引脚方式,完整走 RTC GPIO 初始化
+  // (板上 KEY=GPIO18 有外部 10K 上拉,内部上拉只是兜底)
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init((gpio_num_t)PIN_KEY));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction((gpio_num_t)PIN_KEY, RTC_GPIO_MODE_INPUT_ONLY));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en((gpio_num_t)PIN_KEY));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY));
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-  esp_sleep_enable_ext1_wakeup(1ULL << PIN_KEY, ESP_EXT1_WAKEUP_ANY_LOW);
+  esp_err_t err = esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_KEY, 0);
+
+  // 诊断:BOOT 键(GPIO0,外部上拉)作为第二唤醒源(EXT1 ANY_LOW)。
+  // BOOT 一定连通(下载模式可进即证明),用于验证唤醒机制本身。
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init(GPIO_NUM_0));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction(GPIO_NUM_0, RTC_GPIO_MODE_INPUT_ONLY));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en(GPIO_NUM_0));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis(GPIO_NUM_0));
+  esp_err_t err1 = esp_sleep_enable_ext1_wakeup(1ULL << 0, ESP_EXT1_WAKEUP_ANY_LOW);
+  log_i("ext0(key18) err=%d lvl=%d | ext1(boot0) err=%d lvl=%d", err,
+        rtc_gpio_get_level((gpio_num_t)PIN_KEY), err1, rtc_gpio_get_level(GPIO_NUM_0));
 
   esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
   esp_deep_sleep_start();

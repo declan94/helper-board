@@ -30,7 +30,7 @@ usage() {
   watch     推荐的烧录方式:先等待设备出现,一出现立刻烧录,
             然后自动抓 35 秒启动日志并给出结论行:
               结论: ✅WiFi ✅校时 ✅菜单
-            各阶段有终端提示 + macOS 语音播报。
+            各阶段有终端提示。
   monitor   打开串口监视器(115200),Ctrl+C 退出。
             注意:设备深睡后串口消失,监视器会随之断开。
   -h/help   显示本帮助
@@ -72,8 +72,6 @@ case "$cmd" in
     ;;
   watch)
     # 等待设备出现(按 KEY 唤醒 / 进下载模式均可)→ 烧录 → 抓启动日志并判读
-    # 每个阶段有终端输出 + 语音播报
-    speak() { say "$1" 2>/dev/null || true; }
     echo "🔨 先编译最新代码..."
     CLOG=$(mktemp)
     if arduino-cli compile --fqbn "$FQBN" --build-path "$BUILD_DIR" "$SKETCH" > "$CLOG" 2>&1; then
@@ -91,13 +89,10 @@ case "$cmd" in
       sleep 1
     done
     echo "🔌 检测到设备 $port,开始烧录..."
-    speak "检测到设备,开始烧录"
     if arduino-cli upload --fqbn "$FQBN" --input-dir "$BUILD_DIR" -p "$port" "$SKETCH" 2>&1 | tail -2; then
       echo "✅ 烧录成功,设备重启,抓取 35 秒启动日志..."
-      speak "烧录成功"
     else
       echo "❌ 烧录失败(设备可能中途睡了,重进下载模式再试)"
-      speak "烧录失败"
       exit 1
     fi
     sleep 1
@@ -121,14 +116,11 @@ case "$cmd" in
         [ "$t" = 1 ] && TV="✅校时" || TV="❌校时"
         [ "$f" = 1 ] && FV="✅菜单" || FV="❌菜单"
         echo "结论: $WV $TV $FV"
-        [ "$w$t$f" = "111" ] && speak "全部成功" || speak "有步骤失败,看终端"
       else
         echo "结论: 本次启动未触发同步(看屏幕页脚 Updated 时间即可)"
-        speak "烧录完成"
       fi
     else
       echo "设备已快速入睡,看屏幕确认即可(页脚 Updated = 成功)"
-      speak "烧录完成,请看屏幕"
     fi
     ;;
   -h|--help|help)

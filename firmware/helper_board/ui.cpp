@@ -210,6 +210,11 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
     snprintf(tmp, sizeof(tmp), "LOW BATTERY! %s", stat);
     strlcpy(stat, tmp, sizeof(stat));
   }
+  if (m->wakeTag[0]) {  // 唤醒诊断标记
+    char tmp[96];
+    snprintf(tmp, sizeof(tmp), "%s · %s", m->wakeTag, stat);
+    strlcpy(stat, tmp, sizeof(stat));
+  }
   lv_obj_t *sync = mkLabel(scr, &font_cjk_16, stat);
   lv_obj_align(sync, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
 }
