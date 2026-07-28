@@ -132,20 +132,28 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
   char body[720];
 
   if (m->page == PAGE_TOMORROW) {
-    char b[300], l[300], d[300];
-    if (m->menu.tomorrow.valid) {
-      inlineMeal(m->menu.tomorrow.breakfast, b, sizeof(b));
-      inlineMeal(m->menu.tomorrow.lunch, l, sizeof(l));
-      inlineMeal(m->menu.tomorrow.dinner, d, sizeof(d));
-      snprintf(body, sizeof(body), "Breakfast: %s\n\nLunch: %s\n\nDinner: %s", b, l, d);
-    } else {
-      strlcpy(body, "No menu for tomorrow yet", sizeof(body));
+    if (!m->menu.tomorrow.valid) {
+      lv_obj_t *label = mkLabel(scr, &font_cjk_22, "No menu for tomorrow yet");
+      lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);
+      return;
     }
-    lv_obj_t *label = mkLabel(scr, &font_cjk_22, body);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(label, LCD_WIDTH - 32);
-    lv_obj_set_style_text_line_space(label, 6, 0);
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 16, 106);
+    // 三餐各一个标签:餐内换行紧凑,餐与餐之间留半行(约 10px)
+    static const char *NAMES[3] = { "Breakfast", "Lunch", "Dinner" };
+    const char *meals[3] = { m->menu.tomorrow.breakfast, m->menu.tomorrow.lunch,
+                             m->menu.tomorrow.dinner };
+    int y = 102;
+    for (int i = 0; i < 3; i++) {
+      char inlined[300];
+      inlineMeal(meals[i], inlined, sizeof(inlined));
+      snprintf(body, sizeof(body), "%s: %s", NAMES[i], inlined);
+      lv_obj_t *label = mkLabel(scr, &font_cjk_16, body);
+      lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+      lv_obj_set_width(label, LCD_WIDTH - 48);
+      lv_obj_set_style_text_line_space(label, 2, 0);
+      lv_obj_set_pos(label, 24, y);
+      lv_obj_update_layout(label);
+      y += lv_obj_get_height(label) + 10;
+    }
     return;
   }
 
