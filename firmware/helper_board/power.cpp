@@ -15,9 +15,11 @@ WakeCause Power_GetWakeCause() {
   switch (cause) {
     case ESP_SLEEP_WAKEUP_TIMER:
       return WAKE_TIMER;
-    case ESP_SLEEP_WAKEUP_EXT0:
-      return WAKE_KEY_PAGE;  // KEY(GPIO18)
+    // 注意:实测本板 KEY(GPIO18,配置在 EXT0)按下上报 EXT1,
+    // BOOT(GPIO0,配置在 EXT1)按下上报 EXT0,与配置相反,按实测映射
     case ESP_SLEEP_WAKEUP_EXT1:
+      return WAKE_KEY_PAGE;  // KEY(GPIO18)
+    case ESP_SLEEP_WAKEUP_EXT0:
       return WAKE_KEY_SYNC;  // BOOT(GPIO0)
     default:
       return WAKE_COLD;
