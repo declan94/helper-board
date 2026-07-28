@@ -12,8 +12,14 @@ WakeCause Power_GetWakeCause() {
   // 注意:LCD 引脚的 gpio_hold 此处不解除!必须等 DisplayPort 把引脚重新
   // 配置到空闲电平后再解除,否则 RST 悬空漂低会硬复位面板导致黑屏。
 
-  // 深睡前按键引脚被切到 RTC 功能域(配置唤醒所需),醒来必须切回数字域,
-  // 否则 digitalRead 恒读高——长按被误判为短按并在按住期间反复唤醒切页
+  // 按键引脚在深睡期间被两层机制锁住,醒来必须依次解除,否则 digitalRead
+  // 恒读高,长按被误判为短按并在按住期间反复唤醒切页:
+  // 1) gpio_deep_sleep_hold_en 会冻结所有数字引脚的配置且唤醒后不自动解除
+  // 2) 引脚被 rtc_gpio_init 切到了 RTC 功能域
+  gpio_hold_dis((gpio_num_t)PIN_KEY);
+  gpio_hold_dis(GPIO_NUM_0);
+  rtc_gpio_hold_dis((gpio_num_t)PIN_KEY);
+  rtc_gpio_hold_dis(GPIO_NUM_0);
   rtc_gpio_deinit((gpio_num_t)PIN_KEY);
   rtc_gpio_deinit(GPIO_NUM_0);
 
@@ -24,6 +30,8 @@ WakeCause Power_GetWakeCause() {
     case ESP_SLEEP_WAKEUP_EXT1: {
       // 区分长短按:等待松开,超过阈值即长按
       pinMode(PIN_KEY, INPUT_PULLUP);
+      delay(2);
+      log_i("key level at wake=%d (0=held)", digitalRead(PIN_KEY));
       uint32_t start = millis();
       while (digitalRead(PIN_KEY) == LOW) {
         if (millis() - start >= KEY_LONGPRESS_MS) return WAKE_KEY_LONG;
