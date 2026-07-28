@@ -88,15 +88,6 @@ static void buildStatusBar(lv_obj_t *scr, const UiModel *m) {
   lv_obj_t *dateLabel = mkLabel(scr, &font_cjk_22, buf);
   lv_obj_align(dateLabel, LV_ALIGN_TOP_LEFT, 12, 10);
 
-  // 温湿度
-  if (m->sensorOk) {
-    snprintf(buf, sizeof(buf), "%.1f°C  %.0f%%", m->tempC, m->humi);
-  } else {
-    snprintf(buf, sizeof(buf), "--°C  --%%");
-  }
-  lv_obj_t *envLabel = mkLabel(scr, &font_cjk_22, buf);
-  lv_obj_align(envLabel, LV_ALIGN_TOP_MID, 20, 10);
-
   // 电量:百分比 + 符号(符号固定在最右,百分比向左伸展,避免重叠)
   lv_obj_t *battIcon = mkLabel(scr, &lv_font_montserrat_16, battSymbol(&m->batt));
   lv_obj_align(battIcon, LV_ALIGN_TOP_RIGHT, -10, 13);
@@ -173,13 +164,15 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
     strlcpy(text, m->menu.today.valid ? "This meal is not filled in" : "No menu for today yet",
             sizeof(text));
 
-  lv_obj_t *label = mkLabel(scr, &font_cjk_30, text);
+  // 22px + 行距 4:内容区可容纳 5 行整行,超出部分裁剪以保护页脚
+  lv_obj_t *label = mkLabel(scr, &font_cjk_22, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(label, LCD_WIDTH - 40);
-  lv_obj_set_style_text_line_space(label, 10, 0);
+  lv_obj_set_style_text_line_space(label, 4, 0);
   if (has) {
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 24, 108);
+    lv_obj_set_size(label, LCD_WIDTH - 48, 164);  // 固定高度,超出自动裁剪
+    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 24, 102);
   } else {
+    lv_obj_set_width(label, LCD_WIDTH - 48);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);  // 占位提示居中
   }
 }

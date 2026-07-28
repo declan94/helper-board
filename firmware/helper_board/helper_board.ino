@@ -131,11 +131,9 @@ void setup() {
   }
   m.page = (sPageOverride >= 0) ? (MenuPage)sPageOverride : defaultPage;
 
-  // ---- 采集传感器/电量 ----
-  m.sensorOk = Shtc3_Read(&m.tempC, &m.humi);
+  // ---- 采集电量 ----
   m.batt = Battery_Read();
-  log_i("t=%.1f h=%.1f batt=%.2fV %d%% page=%d", m.tempC, m.humi, m.batt.voltage,
-        m.batt.percent, (int)m.page);
+  log_i("batt=%.2fV %d%% page=%d", m.batt.voltage, m.batt.percent, (int)m.page);
 
   // ---- 渲染并睡眠 ----
   display = new DisplayPort(PIN_LCD_MOSI, PIN_LCD_SCK, PIN_LCD_DC, PIN_LCD_CS,

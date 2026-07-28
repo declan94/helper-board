@@ -8,9 +8,6 @@
 typedef struct {
   struct tm now;
   bool timeValid;
-  float tempC;
-  float humi;
-  bool sensorOk;
   BatteryState batt;
   MenuData menu;
   MenuPage page;
