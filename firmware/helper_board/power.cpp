@@ -9,9 +9,8 @@ static const int lcdPins[] = { PIN_LCD_RST, PIN_LCD_CS, PIN_LCD_DC, PIN_LCD_SCK,
 
 WakeCause Power_GetWakeCause() {
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-
-  // 醒来后先解除引脚保持,否则 SPI 无法驱动屏幕
-  for (int pin : lcdPins) gpio_hold_dis((gpio_num_t)pin);
+  // 注意:LCD 引脚的 gpio_hold 此处不解除!必须等 DisplayPort 把引脚重新
+  // 配置到空闲电平后再解除,否则 RST 悬空漂低会硬复位面板导致黑屏。
 
   switch (cause) {
     case ESP_SLEEP_WAKEUP_TIMER:

@@ -7,6 +7,22 @@
 DisplayPort::DisplayPort(int mosi, int scl, int dc, int cs, int rst, int width, int height,
                          spi_host_device_t spihost)
   : mosi_(mosi), scl_(scl), dc_(dc), cs_(cs), rst_(rst), width_(width), height_(height) {
+  // 深睡唤醒路径:引脚仍处于 gpio_hold 锁定。先按空闲电平配置为输出,
+  // 再逐个解除保持——保证任何时刻 RST/CS 都不悬空(悬空会硬复位面板)。
+  const struct { int pin; uint32_t level; } idlePins[] = {
+    { rst_, 1 }, { cs_, 1 }, { dc_, 0 }, { scl_, 0 }, { mosi_, 0 }
+  };
+  for (auto &p : idlePins) {
+    gpio_config_t conf = {};
+    conf.intr_type = GPIO_INTR_DISABLE;
+    conf.mode = GPIO_MODE_OUTPUT;
+    conf.pin_bit_mask = (0x1ULL << p.pin);
+    conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&conf));
+    gpio_set_level((gpio_num_t)p.pin, p.level);
+    gpio_hold_dis((gpio_num_t)p.pin);  // 引脚已是正确电平,此刻解锁无毛刺
+  }
+
   spi_bus_config_t buscfg = {};
   int transfer = width_ * height_;
   buscfg.miso_io_num = -1;
