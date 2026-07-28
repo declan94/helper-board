@@ -27,10 +27,11 @@ usage() {
   build     (默认)仅编译固件,产物在 build/
   flash     编译并立即烧录——要求设备此刻已在线(串口存在)。
             设备深睡时串口会消失,此时请改用 watch。
-  watch     推荐的烧录方式:先等待设备出现,一出现立刻烧录,
+  watch     推荐的烧录方式:先编译,再等待设备出现,一出现立刻烧录,
             然后自动抓 35 秒启动日志并给出结论行:
               结论: ✅WiFi ✅校时 ✅菜单
             各阶段有终端提示。
+            watch --no-build (或 -n) 跳过编译,直接烧 build/ 现有产物。
   monitor   打开串口监视器(115200),Ctrl+C 退出。
             注意:设备深睡后串口消失,监视器会随之断开。
   -h/help   显示本帮助
@@ -72,14 +73,19 @@ case "$cmd" in
     ;;
   watch)
     # 等待设备出现(按 KEY 唤醒 / 进下载模式均可)→ 烧录 → 抓启动日志并判读
-    echo "🔨 先编译最新代码..."
-    CLOG=$(mktemp)
-    if arduino-cli compile --fqbn "$FQBN" --build-path "$BUILD_DIR" "$SKETCH" > "$CLOG" 2>&1; then
-      grep -E "Sketch uses" "$CLOG" || true
+    if [ "${2:-}" = "--no-build" ] || [ "${2:-}" = "-n" ]; then
+      [ -f "$BUILD_DIR/helper_board.ino.bin" ] || { echo "❌ build/ 里没有产物,先编译一次"; exit 1; }
+      echo "⏭  跳过编译,直接使用 build/ 现有产物"
     else
-      echo "❌ 编译失败:"
-      grep -E "error|Error" "$CLOG" | head -20
-      exit 1
+      echo "🔨 先编译最新代码...(跳过编译用: watch --no-build)"
+      CLOG=$(mktemp)
+      if arduino-cli compile --fqbn "$FQBN" --build-path "$BUILD_DIR" "$SKETCH" > "$CLOG" 2>&1; then
+        grep -E "Sketch uses" "$CLOG" || true
+      else
+        echo "❌ 编译失败:"
+        grep -E "error|Error" "$CLOG" | head -20
+        exit 1
+      fi
     fi
     echo "⏳ 等待设备出现...(进下载模式:长按PWR关机 → 按住BOOT → 单击PWR → 松BOOT)"
     echo "   BOOT 是否生效不用看屏幕(黑屏是正常的),检测到端口我会立刻提示"
