@@ -1,0 +1,5 @@
+firmware/helper_board/secrets.h
+build/
+.DS_Store
+tools/fonts-src/
+node_modules/
