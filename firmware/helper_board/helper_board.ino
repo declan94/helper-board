@@ -18,24 +18,6 @@ RTC_DATA_ATTR static uint32_t sWakeCount = 0;  // 唤醒计数(诊断用,断电�
 
 static DisplayPort *display = NULL;
 
-// 判断本次定时唤醒是否需要联网同步
-static bool shouldSync(time_t now, time_t lastSync) {
-  if (now - lastSync > SYNC_MAX_AGE_SEC) return true;
-  static const int forceHours[] = SYNC_FORCE_HOURS;
-  struct tm lt;
-  localtime_r(&now, &lt);
-  for (int h : forceHours) {
-    if (lt.tm_hour == h) {
-      // 本整点后还没同步过 → 强制同步(覆盖"出门前改当日菜单"场景)
-      struct tm hourStart = lt;
-      hourStart.tm_min = 0;
-      hourStart.tm_sec = 0;
-      if (lastSync < mktime(&hourStart)) return true;
-    }
-  }
-  return false;
-}
-
 static uint32_t secondsToNextWake(time_t now, bool timeValid) {
   if (!timeValid) return 300;  // 时间未知:5 分钟后重试同步
   uint32_t rem = WAKE_INTERVAL_SEC - (uint32_t)(now % WAKE_INTERVAL_SEC);
@@ -75,6 +57,7 @@ void setup() {
       break;  // KEY 键:下面结合默认页计算切页
     case WAKE_TIMER:
       sPageOverride = -1;  // 回到时段默认页
+      needSync = true;     // 每次定时唤醒都同步,菜单更新最迟 WAKE_INTERVAL_SEC 生效
       break;
   }
 
@@ -90,7 +73,6 @@ void setup() {
     localtime_r(&tmr, &lt);
     strftime(tomorrowStr, sizeof(tomorrowStr), "%Y-%m-%d", &lt);
     MenuStore_Load(&m.menu, todayStr, tomorrowStr);
-    if (wake == WAKE_TIMER && shouldSync(now, m.menu.lastSync)) needSync = true;
   } else {
     needSync = true;  // 时间无效必须联网校时
   }

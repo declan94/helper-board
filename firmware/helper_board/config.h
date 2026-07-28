@@ -28,10 +28,7 @@
 #define TOMORROW_PREVIEW_START_MIN (20 * 60 + 30)
 
 // ===== 唤醒与同步策略 =====
-#define WAKE_INTERVAL_SEC (30 * 60)   // 定时唤醒周期
-#define SYNC_MAX_AGE_SEC (2 * 3600)   // 缓存超过该时长则联网同步
-// 这些整点所在的首个定时唤醒强制同步(覆盖三餐前更新当日菜单的场景)
-#define SYNC_FORCE_HOURS {6, 10, 15, 20}
+#define WAKE_INTERVAL_SEC (30 * 60)   // 定时唤醒周期,每次唤醒都联网同步菜单
 
 #define WIFI_CONNECT_TIMEOUT_MS 12000
 #define SNTP_TIMEOUT_MS 8000
