@@ -35,7 +35,7 @@
 
 #define WIFI_CONNECT_TIMEOUT_MS 12000
 #define SNTP_TIMEOUT_MS 8000
-#define KEY_LONGPRESS_MS 1000         // 唤醒后按住超过该时长视为长按(强制同步)
+#define KEY_LONGPRESS_MS 700          // 唤醒后按住超过该时长视为长按(强制同步);计时从启动代码跑完开始,实际手感 ≈ 该值 + 1s 启动耗时
 
 // ===== 传感器 =====
 #define TEMP_OFFSET_C 0.0f  // SHTC3 自发热补偿(常亮工况官方用 4.0,深睡工况几乎无自热)
