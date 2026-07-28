@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# 编译/烧录固件
-#   ./tools/build.sh            仅编译
-#   ./tools/build.sh flash      编译并烧录(自动探测串口,或用 PORT=/dev/xxx 指定)
-#   ./tools/build.sh monitor    打开串口监视器
+# 编译/烧录固件。详细说明: ./tools/build.sh -h
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,6 +18,40 @@ if [ ! -f "$SKETCH/secrets.h" ]; then
 fi
 
 cmd="${1:-build}"
+
+usage() {
+  cat <<'USAGE'
+用法: ./tools/build.sh [命令]
+
+命令:
+  build     (默认)仅编译固件,产物在 build/
+  flash     编译并立即烧录——要求设备此刻已在线(串口存在)。
+            设备深睡时串口会消失,此时请改用 watch。
+  watch     推荐的烧录方式:先等待设备出现,一出现立刻烧录,
+            然后自动抓 35 秒启动日志并给出结论行:
+              结论: ✅WiFi ✅校时 ✅菜单
+            各阶段有终端提示 + macOS 语音播报。
+  monitor   打开串口监视器(115200),Ctrl+C 退出。
+            注意:设备深睡后串口消失,监视器会随之断开。
+  -h/help   显示本帮助
+
+串口:
+  默认自动探测 /dev/cu.usbmodem* 等;多设备或探测不到时用环境变量指定:
+    PORT=/dev/cu.usbmodem101 ./tools/build.sh flash
+
+让深睡的设备可烧录(二选一):
+  A. 短按 KEY 唤醒(醒几秒,配合 watch 抢窗口,偶尔失败会自动重等)
+  B. 下载模式(最稳):长按 PWR 关机 → 按住 BOOT 不放 → 单击 PWR
+     → 松开 BOOT。屏幕保持黑屏是正常的,判断标准是串口出现
+     (watch 会立刻提示"检测到设备")。烧录完成自动重启运行。
+
+首次使用:
+  1. ./tools/gen_fonts.sh                     生成中文字库(一次即可)
+  2. cp firmware/helper_board/secrets.h.example firmware/helper_board/secrets.h
+     并填入 WiFi 与 Lark 凭据(见 docs/lark-setup.md)
+  3. ./tools/build.sh watch                   编译产物烧录进设备
+USAGE
+}
 
 find_port() {
   if [ -n "${PORT:-}" ]; then echo "$PORT"; return; fi
@@ -47,6 +78,15 @@ case "$cmd" in
     # 等待设备出现(按 KEY 唤醒 / 进下载模式均可)→ 烧录 → 抓启动日志并判读
     # 每个阶段有终端输出 + 语音播报
     speak() { say "$1" 2>/dev/null || true; }
+    echo "🔨 先编译最新代码..."
+    CLOG=$(mktemp)
+    if arduino-cli compile --fqbn "$FQBN" --build-path "$BUILD_DIR" "$SKETCH" > "$CLOG" 2>&1; then
+      grep -E "Sketch uses" "$CLOG" || true
+    else
+      echo "❌ 编译失败:"
+      grep -E "error|Error" "$CLOG" | head -20
+      exit 1
+    fi
     echo "⏳ 等待设备出现...(进下载模式:长按PWR关机 → 按住BOOT → 单击PWR → 松BOOT)"
     echo "   BOOT 是否生效不用看屏幕(黑屏是正常的),检测到端口我会立刻提示"
     while :; do
@@ -95,8 +135,11 @@ case "$cmd" in
       speak "烧录完成,请看屏幕"
     fi
     ;;
+  -h|--help|help)
+    usage
+    ;;
   *)
-    echo "用法: build.sh [build|flash|monitor|watch]"
+    usage
     exit 1
     ;;
 esac
