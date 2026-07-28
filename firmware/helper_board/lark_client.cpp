@@ -9,10 +9,27 @@
 #include "config.h"
 #include "secrets.h"
 
-static const char *TAG_URL_TOKEN = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";
+static const char *TAG_URL_TOKEN = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal";
 
-// DigiCert Global Root G2 — open.feishu.cn 证书链根,有效期至 2038-01
-static const char DIGICERT_G2_ROOT[] = R"(-----BEGIN CERTIFICATE-----
+// Lark(海外版)open.larksuite.com 证书链根 DigiCert Global Root G3(ECC),
+// 附带 G2(飞书 open.feishu.cn 所用)以备切换,均有效至 2038-01。
+// mbedTLS 支持多张 PEM 串接。
+static const char LARK_CA_ROOTS[] = R"(-----BEGIN CERTIFICATE-----
+MIICPzCCAcWgAwIBAgIQBVVWvPJepDU1w6QP1atFcjAKBggqhkjOPQQDAzBhMQsw
+CQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cu
+ZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBHMzAe
+Fw0xMzA4MDExMjAwMDBaFw0zODAxMTUxMjAwMDBaMGExCzAJBgNVBAYTAlVTMRUw
+EwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5jb20x
+IDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEczMHYwEAYHKoZIzj0CAQYF
+K4EEACIDYgAE3afZu4q4C/sLfyHS8L6+c/MzXRq8NOrexpu80JX28MzQC7phW1FG
+fp4tn+6OYwwX7Adw9c+ELkCDnOg/QW07rdOkFFk2eJ0DQ+4QE2xy3q6Ip6FrtUPO
+Z9wj/wMco+I+o0IwQDAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAd
+BgNVHQ4EFgQUs9tIpPmhxdiuNkHMEWNpYim8S8YwCgYIKoZIzj0EAwMDaAAwZQIx
+AK288mw/EkrRLTnDCgmXc/SINoyIJ7vmiI1Qhadj+Z4y3maTD/HMsQmP3Wyr+mt/
+oAIwOWZbwmSNuJ5Q3KjVSaLtx9zRSX8XAbjIho9OjIgrqJqpisXRAL34VOKa5Vt8
+sycX
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
 MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
 MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
 d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH
@@ -80,7 +97,7 @@ static bool fetchToken(String &token) {
   }
 
   WiFiClientSecure client;
-  client.setCACert(DIGICERT_G2_ROOT);
+  client.setCACert(LARK_CA_ROOTS);
   HTTPClient http;
   http.setTimeout(10000);
   if (!http.begin(client, TAG_URL_TOKEN)) return false;
@@ -161,10 +178,10 @@ static bool fetchMenu(const String &token, MenuData *menu) {
   String body;
   serializeJson(req, body);
 
-  String url = String("https://open.feishu.cn/open-apis/bitable/v1/apps/") + LARK_BASE_APP_TOKEN + "/tables/" + LARK_TABLE_ID + "/records/search?page_size=10";
+  String url = String("https://open.larksuite.com/open-apis/bitable/v1/apps/") + LARK_BASE_APP_TOKEN + "/tables/" + LARK_TABLE_ID + "/records/search?page_size=10";
 
   WiFiClientSecure client;
-  client.setCACert(DIGICERT_G2_ROOT);
+  client.setCACert(LARK_CA_ROOTS);
   HTTPClient http;
   http.setTimeout(10000);
   if (!http.begin(client, url)) return false;

@@ -1,7 +1,8 @@
 # helper-board 家庭菜单显示面板
 
 基于 Waveshare **ESP32-S3-RLCD-4.2**(4.2 寸反射式 LCD,类墨水屏观感、超低功耗)的菜单面板:
-家人在**飞书多维表格**里填每天的早/中/晚菜单,面板定时拉取并显示,供家中帮工查看。
+家人在 **Lark 多维表格(Base)** 里填每天的早/中/晚菜单,面板定时拉取并显示,供家中帮工查看。
+(对接 Lark 国际版 `open.larksuite.com`;中国版飞书只需改 `lark_client.cpp` 中的域名,两版根证书均已内置)
 
 ```
 ┌────────────────────────────────────────────┐
@@ -34,9 +35,9 @@ arduino-cli core install esp32:esp32 \
 # 1. 生成中文字库(首次;GB2312 全字集 × 3 字号,产物已可复用)
 ./tools/gen_fonts.sh
 
-# 2. 配置飞书应用与表格 → 见 docs/lark-setup.md
+# 2. 配置 Lark 应用与表格 → 见 docs/lark-setup.md
 cp firmware/helper_board/secrets.h.example firmware/helper_board/secrets.h
-#    编辑 secrets.h 填 WiFi 与飞书凭据
+#    编辑 secrets.h 填 WiFi 与 Lark 凭据
 
 # 3. 编译 / 烧录(USB-C 连接开发板)
 ./tools/build.sh          # 仅编译
@@ -50,20 +51,20 @@ cp firmware/helper_board/secrets.h.example firmware/helper_board/secrets.h
 firmware/helper_board/    Arduino 主工程
   helper_board.ino          唤醒分发主流程(醒来→干一件事→重绘→深睡)
   config.h                  引脚 / 餐次时段 / 同步策略
-  secrets.h(.example)       WiFi + 飞书凭据(不入库)
+  secrets.h(.example)       WiFi + Lark 凭据(不入库)
   display_bsp.*             ST7305 驱动(改自官方例程,增加 LPM 保持模式)
   ui.*                      LVGL 9 单次渲染布局
   sensors.*                 SHTC3 温湿度 + PCF85063 RTC(Wire)
   battery.*                 电量 ADC(GPIO4,×3 分压)
   power.*                   深睡眠 / 唤醒源 / 按键长短按 / GPIO 保持
-  lark_client.*             WiFi + SNTP + 飞书 token + Bitable 查询
+  lark_client.*             WiFi + SNTP + Lark token + Bitable 查询
   menu_store.*              菜单数据模型 + NVS 缓存
   src/fonts/                生成的 GB2312 字库(思源黑体,OFL)
   partitions.csv            16MB 自定义分区(8MB app)
 libraries/                LVGL 9.3.0(Waveshare 移植配置)+ ArduinoJson(vendored)
 tools/gen_fonts.sh        中文字库生成(Noto Sans SC → lv_font_conv)
 tools/build.sh            arduino-cli 编译/烧录封装
-docs/lark-setup.md        飞书应用 + 多维表格配置指南
+docs/lark-setup.md        Lark 应用 + 多维表格配置指南
 ```
 
 ## 真机验证清单(烧录后按顺序检查)
@@ -82,4 +83,4 @@ docs/lark-setup.md        飞书应用 + 多维表格配置指南
 - **深睡时屏幕保持**依据 ST7305 LPM 特性与社区实测,但未在本板实测确认 —— 是首要验证项(见清单第 2 条)
 - **充电状态**用电压 >4.15V 启发式判断(原理图如有 VBUS/CHG 检测脚可改 `battery.cpp` 精确化)
 - `app_secret` 明文存于设备 flash:家用场景可接受,应用权限已收敛为 bitable 只读
-- 飞书 HTTPS 根证书(DigiCert Global Root G2,2038 到期)已内置于 `lark_client.cpp`
+- HTTPS 根证书已内置于 `lark_client.cpp`(Lark 国际版 DigiCert Global Root G3 + 飞书 G2,均 2038 到期)

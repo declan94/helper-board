@@ -1,4 +1,4 @@
-// WiFi + SNTP + 飞书多维表格取数
+// WiFi + SNTP + Lark 多维表格取数
 #pragma once
 
 #include <stdbool.h>

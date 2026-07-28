@@ -17,9 +17,9 @@
 #define LCD_HEIGHT 300
 
 // ===== 时间与餐次 =====
-#define TZ_STRING "CST-8"          // Asia/Shanghai
-#define NTP_SERVER1 "ntp.aliyun.com"
-#define NTP_SERVER2 "cn.pool.ntp.org"
+#define TZ_STRING "CST-8"          // UTC+8(如在其他时区,按 POSIX TZ 格式修改)
+#define NTP_SERVER1 "pool.ntp.org"
+#define NTP_SERVER2 "time.cloudflare.com"
 
 // 默认餐次时段(小时,含起点不含终点): [5,10)早 [10,15.5)午 [15.5,20.5)晚 [20.5,~)明日预览
 #define MEAL_BREAKFAST_START_MIN (5 * 60)
