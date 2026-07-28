@@ -97,9 +97,10 @@ void setup() {
   if (needSync) {
     m.syncAttempted = true;
     SyncResult r = Lark_SyncAll(!timeValid, &m.menu);
-    if (!timeValid && r.timeOk) {
-      timeValid = true;
-      now = time(NULL);
+    if (r.timeOk) timeValid = true;
+    // NTP 可能大幅修正时间(如出厂残留),日期字符串必须重算
+    now = time(NULL);
+    if (timeValid) {
       struct tm lt;
       localtime_r(&now, &lt);
       strftime(todayStr, sizeof(todayStr), "%Y-%m-%d", &lt);
@@ -111,7 +112,7 @@ void setup() {
     if (r.fetchOk) {
       MenuStore_Save(&m.menu);
     } else if (timeValid) {
-      // 拉取失败:退回缓存
+      // 拉取失败:按(可能已被校正的)日期退回缓存
       MenuStore_Load(&m.menu, todayStr, tomorrowStr);
     }
     Net_Disconnect();

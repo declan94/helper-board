@@ -27,7 +27,9 @@ static lv_obj_t *mkLabel(lv_obj_t *parent, const lv_font_t *font, const char *te
   return l;
 }
 
-static const char *WEEKDAYS[] = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
+static const char *WEEKDAYS[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+static const char *MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
 // 电量图标(montserrat 内置符号)
 static const char *battSymbol(const BatteryState *b) {
@@ -52,20 +54,20 @@ static bool mealText(const char *raw, char *out, size_t outLen) {
 static void inlineMeal(const char *raw, char *out, size_t outLen) {
   char tmp[256];
   if (!mealText(raw, tmp, sizeof(tmp))) {
-    strlcpy(out, "未填写", outLen);
+    strlcpy(out, "(not filled)", outLen);
     return;
   }
   out[0] = '\0';
   bool prevBreak = false;
   size_t o = 0;
-  for (const char *p = tmp; *p && o + 4 < outLen; p++) {
+  for (const char *p = tmp; *p && o + 3 < outLen; p++) {
     if (*p == '\n' || *p == '\r') {
       prevBreak = true;
       continue;
     }
     if (prevBreak) {
-      memcpy(out + o, "、", 3);  // UTF-8 顿号 3 字节
-      o += 3;
+      out[o++] = ',';
+      out[o++] = ' ';
       prevBreak = false;
     }
     out[o++] = *p;
@@ -78,10 +80,10 @@ static void buildStatusBar(lv_obj_t *scr, const UiModel *m) {
 
   // 日期(不显示时钟——电池方案下时钟无法实时走字)
   if (m->timeValid) {
-    snprintf(buf, sizeof(buf), "%d月%d日 %s", m->now.tm_mon + 1, m->now.tm_mday,
+    snprintf(buf, sizeof(buf), "%s %d, %s", MONTHS[m->now.tm_mon % 12], m->now.tm_mday,
              WEEKDAYS[m->now.tm_wday % 7]);
   } else {
-    snprintf(buf, sizeof(buf), "日期未知");
+    snprintf(buf, sizeof(buf), "Date unknown");
   }
   lv_obj_t *dateLabel = mkLabel(scr, &font_cjk_22, buf);
   lv_obj_align(dateLabel, LV_ALIGN_TOP_LEFT, 12, 10);
@@ -112,8 +114,8 @@ static void buildStatusBar(lv_obj_t *scr, const UiModel *m) {
 }
 
 static void buildTabs(lv_obj_t *scr, MenuPage active) {
-  static const char *NAMES[PAGE_COUNT] = { "早餐", "午餐", "晚餐", "明日" };
-  const int tabW = 88, tabH = 34, gap = 8;
+  static const char *NAMES[PAGE_COUNT] = { "Breakfast", "Lunch", "Dinner", "Tomorrow" };
+  const int tabW = 92, tabH = 34, gap = 6;
   const int totalW = tabW * PAGE_COUNT + gap * (PAGE_COUNT - 1);
   int x0 = (LCD_WIDTH - totalW) / 2;
   for (int i = 0; i < PAGE_COUNT; i++) {
@@ -128,7 +130,8 @@ static void buildTabs(lv_obj_t *scr, MenuPage active) {
     lv_obj_set_style_border_color(tab, lv_color_black(), 0);
     lv_obj_set_style_border_width(tab, isActive ? 0 : 1, 0);
 
-    lv_obj_t *l = mkLabel(tab, &font_cjk_22, NAMES[i]);
+    // "Breakfast/Tomorrow" 在 22px 下超出 92px 页签宽,页签用 16px
+    lv_obj_t *l = mkLabel(tab, &font_cjk_16, NAMES[i]);
     lv_obj_set_style_text_color(l, isActive ? lv_color_white() : lv_color_black(), 0);
     lv_obj_center(l);
   }
@@ -143,9 +146,9 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
       inlineMeal(m->menu.tomorrow.breakfast, b, sizeof(b));
       inlineMeal(m->menu.tomorrow.lunch, l, sizeof(l));
       inlineMeal(m->menu.tomorrow.dinner, d, sizeof(d));
-      snprintf(body, sizeof(body), "早餐:%s\n\n午餐:%s\n\n晚餐:%s", b, l, d);
+      snprintf(body, sizeof(body), "Breakfast: %s\n\nLunch: %s\n\nDinner: %s", b, l, d);
     } else {
-      strlcpy(body, "明日菜单未填写", sizeof(body));
+      strlcpy(body, "No menu for tomorrow yet", sizeof(body));
     }
     lv_obj_t *label = mkLabel(scr, &font_cjk_22, body);
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
@@ -166,7 +169,9 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
 
   char text[512];
   bool has = raw && mealText(raw, text, sizeof(text));
-  if (!has) strlcpy(text, m->menu.today.valid ? "本餐未填写" : "今日菜单未填写", sizeof(text));
+  if (!has)
+    strlcpy(text, m->menu.today.valid ? "This meal is not filled in" : "No menu for today yet",
+            sizeof(text));
 
   lv_obj_t *label = mkLabel(scr, &font_cjk_30, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
@@ -185,10 +190,10 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
   // 左:当前页对应的备注
   const DayMenu *day = (m->page == PAGE_TOMORROW) ? &m->menu.tomorrow : &m->menu.today;
   if (day->valid && day->note[0]) {
-    snprintf(buf, sizeof(buf), "备注:%s", day->note);
+    snprintf(buf, sizeof(buf), "Note: %s", day->note);
     lv_obj_t *note = mkLabel(scr, &font_cjk_16, buf);
     lv_label_set_long_mode(note, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(note, 180);
+    lv_obj_set_width(note, 150);
     lv_obj_align(note, LV_ALIGN_BOTTOM_LEFT, 12, -8);
   }
 
@@ -198,18 +203,18 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
     struct tm st;
     localtime_r(&m->menu.lastSync, &st);
     if (m->syncAttempted && !m->syncOk) {
-      snprintf(stat, sizeof(stat), "同步失败·缓存 %02d-%02d %02d:%02d",
+      snprintf(stat, sizeof(stat), "Sync failed (%02d-%02d %02d:%02d)",
                st.tm_mon + 1, st.tm_mday, st.tm_hour, st.tm_min);
     } else {
-      snprintf(stat, sizeof(stat), "更新于 %02d-%02d %02d:%02d",
+      snprintf(stat, sizeof(stat), "Updated %02d-%02d %02d:%02d",
                st.tm_mon + 1, st.tm_mday, st.tm_hour, st.tm_min);
     }
   } else {
-    strlcpy(stat, m->syncAttempted ? "同步失败" : "未同步", sizeof(stat));
+    strlcpy(stat, m->syncAttempted ? "Sync failed" : "Not synced", sizeof(stat));
   }
   if (m->batt.percent <= BAT_LOW_WARN_PCT && !m->batt.plugged) {
     char tmp[96];
-    snprintf(tmp, sizeof(tmp), "电量低!%s", stat);
+    snprintf(tmp, sizeof(tmp), "LOW BATTERY! %s", stat);
     strlcpy(stat, tmp, sizeof(stat));
   }
   lv_obj_t *sync = mkLabel(scr, &font_cjk_16, stat);

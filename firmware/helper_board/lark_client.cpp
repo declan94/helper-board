@@ -231,10 +231,9 @@ SyncResult Lark_SyncAll(bool needTime, MenuData *menu) {
   r.wifiOk = connectWifi();
   if (!r.wifiOk) return r;
 
-  if (needTime) {
-    r.timeOk = syncTimeToRtc();
-    if (!r.timeOk) return r;  // 时间都没有,日期过滤无意义
-  }
+  // 只要联网就校时:修正 RTC 出厂残留值与长期漂移
+  r.timeOk = syncTimeToRtc();
+  if (needTime && !r.timeOk) return r;  // 完全没有可信时间,日期过滤无意义
 
   String token;
   if (fetchToken(token)) {

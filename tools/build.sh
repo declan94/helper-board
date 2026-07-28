@@ -10,7 +10,7 @@ SKETCH="$ROOT/firmware/helper_board"
 BUILD_DIR="$ROOT/build"
 
 # N16R8 模组:16MB QIO Flash + 8MB OPI PSRAM;USB-C 走原生 USB(CDC 串口)
-FQBN="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,CDCOnBoot=cdc,PartitionScheme=custom"
+FQBN="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,CDCOnBoot=cdc,PartitionScheme=custom,DebugLevel=info"
 
 # libraries/ 在项目根目录(ARDUINO_DIRECTORIES_USER 指向项目根)
 export ARDUINO_DIRECTORIES_USER="$ROOT"
@@ -24,7 +24,8 @@ cmd="${1:-build}"
 
 find_port() {
   if [ -n "${PORT:-}" ]; then echo "$PORT"; return; fi
-  ls /dev/cu.usbmodem* /dev/cu.wchusbserial* /dev/cu.usbserial* 2>/dev/null | head -1
+  # ls 无匹配时返回非零,加 || true 防止 set -e 静默退出
+  { ls /dev/cu.usbmodem* /dev/cu.wchusbserial* /dev/cu.usbserial* 2>/dev/null || true; } | head -1
 }
 
 case "$cmd" in
