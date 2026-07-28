@@ -68,11 +68,11 @@ void setup() {
       needSync = true;
       sPageOverride = -1;
       break;
-    case WAKE_KEY_LONG:
+    case WAKE_KEY_SYNC:  // BOOT 键:强制同步
       needSync = true;
       break;
-    case WAKE_KEY_SHORT:
-      break;  // 下面结合默认页计算
+    case WAKE_KEY_PAGE:
+      break;  // KEY 键:下面结合默认页计算切页
     case WAKE_TIMER:
       sPageOverride = -1;  // 回到时段默认页
       break;
@@ -127,7 +127,7 @@ void setup() {
   MenuPage defaultPage = timeValid
                            ? MenuPage_DefaultFor(m.now.tm_hour * 60 + m.now.tm_min)
                            : PAGE_BREAKFAST;
-  if (wake == WAKE_KEY_SHORT) {
+  if (wake == WAKE_KEY_PAGE) {
     sPageOverride = (sPageOverride < 0) ? ((int8_t)defaultPage + 1) % PAGE_COUNT
                                         : (sPageOverride + 1) % PAGE_COUNT;
   }
