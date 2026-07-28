@@ -12,6 +12,11 @@ WakeCause Power_GetWakeCause() {
   // 注意:LCD 引脚的 gpio_hold 此处不解除!必须等 DisplayPort 把引脚重新
   // 配置到空闲电平后再解除,否则 RST 悬空漂低会硬复位面板导致黑屏。
 
+  // 深睡前按键引脚被切到 RTC 功能域(配置唤醒所需),醒来必须切回数字域,
+  // 否则 digitalRead 恒读高——长按被误判为短按并在按住期间反复唤醒切页
+  rtc_gpio_deinit((gpio_num_t)PIN_KEY);
+  rtc_gpio_deinit(GPIO_NUM_0);
+
   switch (cause) {
     case ESP_SLEEP_WAKEUP_TIMER:
       return WAKE_TIMER;
