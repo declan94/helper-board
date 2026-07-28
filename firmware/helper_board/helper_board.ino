@@ -133,11 +133,7 @@ void setup() {
   }
   m.page = (sPageOverride >= 0) ? (MenuPage)sPageOverride : defaultPage;
 
-  // ---- 采集电量与诊断标记 ----
-  static const char WAKE_LETTER[] = { 'C', 'T', 'K', 'L' };  // 对应 WakeCause 枚举
-  pinMode(PIN_KEY, INPUT_PULLUP);
-  snprintf(m.wakeTag, sizeof(m.wakeTag), "%c%u k%d", WAKE_LETTER[wake], sWakeCount,
-           digitalRead(PIN_KEY));  // k0=渲染瞬间 KEY 按下,验证按键通断
+  // ---- 采集电量 ----
   m.batt = Battery_Read();
   log_i("batt=%.2fV %d%% page=%d", m.batt.voltage, m.batt.percent, (int)m.page);
 
