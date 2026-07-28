@@ -45,11 +45,7 @@ usage() {
      → 松开 BOOT。屏幕保持黑屏是正常的,判断标准是串口出现
      (watch 会立刻提示"检测到设备")。烧录完成自动重启运行。
 
-首次使用:
-  1. ./tools/gen_fonts.sh                     生成中文字库(一次即可)
-  2. cp firmware/helper_board/secrets.h.example firmware/helper_board/secrets.h
-     并填入 WiFi 与 Lark 凭据(见 docs/lark-setup.md)
-  3. ./tools/build.sh watch                   编译产物烧录进设备
+首次使用(字库生成、凭据配置)见 README.md
 USAGE
 }
 
