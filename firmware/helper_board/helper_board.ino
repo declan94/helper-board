@@ -75,7 +75,8 @@ void setup() {
   }
 
   // ---- 加载缓存菜单(需要日期字符串) ----
-  UiModel m = {};
+  static UiModel m;  // ~2KB,放静态区,不占 loopTask 栈(实测栈溢出过)
+  memset(&m, 0, sizeof(m));
   time_t now = time(NULL);
   char todayStr[11] = "", tomorrowStr[11] = "";
   if (timeValid) {
@@ -95,7 +96,8 @@ void setup() {
     m.syncAttempted = true;
     if (wake == WAKE_KEY_SYNC) {
       // 手动同步给即时反馈:先按当前缓存渲染一帧,页脚显示 Updating...
-      UiModel pre = m;
+      static UiModel pre;  // 同上,避免栈上 2KB 拷贝
+      pre = m;
       localtime_r(&now, &pre.now);
       pre.timeValid = timeValid;
       MenuPage prePage = timeValid ? MenuPage_DefaultFor(pre.now.tm_hour * 60 + pre.now.tm_min)
