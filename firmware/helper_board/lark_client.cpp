@@ -57,9 +57,17 @@ MrY=
 RTC_DATA_ATTR static char sTokenCache[160] = {0};
 RTC_DATA_ATTR static time_t sTokenExpiry = 0;
 
-static bool connectWifi() {
+static bool sBeginCalled = false;
+
+void Net_BeginConnect() {
+  if (sBeginCalled) return;
+  sBeginCalled = true;
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+static bool connectWifi() {
+  Net_BeginConnect();  // 若未提前发起则此刻发起
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - t0 > WIFI_CONNECT_TIMEOUT_MS) return false;

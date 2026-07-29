@@ -11,6 +11,7 @@ typedef struct {
   BatteryState batt;
   MenuData menu;
   MenuPage page;
+  bool syncing;        // 正在同步:页脚显示 Updating...
   bool syncAttempted;  // 本次唤醒尝试过联网同步
   bool syncOk;
 } UiModel;

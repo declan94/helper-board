@@ -200,6 +200,11 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
 
   // 右:同步状态
   char stat[80];
+  if (m->syncing) {
+    lv_obj_t *sync = mkLabel(scr, &font_cjk_16, "Updating...");
+    lv_obj_align(sync, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
+    return;
+  }
   if (m->menu.lastSync > 0) {
     struct tm st;
     localtime_r(&m->menu.lastSync, &st);

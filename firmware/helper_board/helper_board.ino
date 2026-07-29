@@ -35,6 +35,10 @@ void setup() {
   tzset();
   Sensors_Init();
 
+  // 需要联网的唤醒先异步发起 WiFi(不阻塞),与屏幕初始化并行,
+  // 保证 WiFi 在干净的启动状态下最先启动
+  if (wake != WAKE_KEY_PAGE) Net_BeginConnect();
+
   // 屏幕尽早初始化:冷启动联网可达 20+ 秒,先给出可见反馈,
   // 否则按 PWR 开机后长时间黑屏会被误认为没开机
   display = new DisplayPort(PIN_LCD_MOSI, PIN_LCD_SCK, PIN_LCD_DC, PIN_LCD_CS,
@@ -87,6 +91,18 @@ void setup() {
   // ---- 联网同步 ----
   if (needSync) {
     m.syncAttempted = true;
+    if (wake == WAKE_KEY_SYNC) {
+      // 手动同步给即时反馈:先按当前缓存渲染一帧,页脚显示 Updating...
+      UiModel pre = m;
+      localtime_r(&now, &pre.now);
+      pre.timeValid = timeValid;
+      MenuPage prePage = timeValid ? MenuPage_DefaultFor(pre.now.tm_hour * 60 + pre.now.tm_min)
+                                   : PAGE_BREAKFAST;
+      pre.page = (sPageOverride >= 0) ? (MenuPage)sPageOverride : prePage;
+      pre.batt = Battery_Read();
+      pre.syncing = true;
+      Ui_RenderAll(display, &pre);
+    }
     SyncResult r = Lark_SyncAll(!timeValid, &m.menu);
     if (r.timeOk) timeValid = true;
     // NTP 可能大幅修正时间(如出厂残留),日期字符串必须重算
