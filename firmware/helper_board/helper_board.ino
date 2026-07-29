@@ -35,6 +35,13 @@ void setup() {
   tzset();
   Sensors_Init();
 
+  // 屏幕尽早初始化:冷启动联网可达 20+ 秒,先给出可见反馈,
+  // 否则按 PWR 开机后长时间黑屏会被误认为没开机
+  display = new DisplayPort(PIN_LCD_MOSI, PIN_LCD_SCK, PIN_LCD_DC, PIN_LCD_CS,
+                            PIN_LCD_RST, LCD_WIDTH, LCD_HEIGHT);
+  display->RLCD_Init(wake == WAKE_COLD);
+  if (wake == WAKE_COLD) Ui_Splash(display, "Starting...");
+
   // 硬件 RTC → 系统时间
   struct tm rtcTm;
   bool timeValid = Rtc_GetTime(&rtcTm);
@@ -50,11 +57,11 @@ void setup() {
       needSync = true;
       sPageOverride = -1;
       break;
-    case WAKE_KEY_SYNC:  // BOOT 键:强制同步
+    case WAKE_KEY_SYNC:  // KEY 长按:强制同步
       needSync = true;
       break;
     case WAKE_KEY_PAGE:
-      break;  // KEY 键:下面结合默认页计算切页
+      break;  // KEY 短按:下面结合默认页计算切页
     case WAKE_TIMER:
       sPageOverride = -1;  // 回到时段默认页
       needSync = true;     // 每次定时唤醒都同步,菜单更新最迟 WAKE_INTERVAL_SEC 生效
@@ -120,9 +127,6 @@ void setup() {
   log_i("batt=%.2fV %d%% page=%d", m.batt.voltage, m.batt.percent, (int)m.page);
 
   // ---- 渲染并睡眠 ----
-  display = new DisplayPort(PIN_LCD_MOSI, PIN_LCD_SCK, PIN_LCD_DC, PIN_LCD_CS,
-                            PIN_LCD_RST, LCD_WIDTH, LCD_HEIGHT);
-  display->RLCD_Init(wake == WAKE_COLD);
   Ui_RenderAll(display, &m);
   display->RLCD_EnterLowPower();
 

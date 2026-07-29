@@ -15,12 +15,21 @@ WakeCause Power_GetWakeCause() {
   switch (cause) {
     case ESP_SLEEP_WAKEUP_TIMER:
       return WAKE_TIMER;
-    // 注意:实测本板 KEY(GPIO18,配置在 EXT0)按下上报 EXT1,
-    // BOOT(GPIO0,配置在 EXT1)按下上报 EXT0,与配置相反,按实测映射
-    case ESP_SLEEP_WAKEUP_EXT1:
-      return WAKE_KEY_PAGE;  // KEY(GPIO18)
     case ESP_SLEEP_WAKEUP_EXT0:
-      return WAKE_KEY_SYNC;  // BOOT(GPIO0)
+    case ESP_SLEEP_WAKEUP_EXT1: {
+      // KEY 唤醒。用 RTC 域读电平区分长短按(数字域 digitalRead 在深睡
+      // 唤醒后受 hold/功能域影响不可靠,RTC 域读取已在日志中验证准确)
+      rtc_gpio_init((gpio_num_t)PIN_KEY);
+      rtc_gpio_set_direction((gpio_num_t)PIN_KEY, RTC_GPIO_MODE_INPUT_ONLY);
+      rtc_gpio_pullup_en((gpio_num_t)PIN_KEY);
+      rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY);
+      uint32_t start = millis();
+      while (rtc_gpio_get_level((gpio_num_t)PIN_KEY) == 0) {
+        if (millis() - start >= KEY_LONGPRESS_MS) return WAKE_KEY_SYNC;
+        delay(10);
+      }
+      return WAKE_KEY_PAGE;
+    }
     default:
       return WAKE_COLD;
   }
@@ -28,25 +37,24 @@ WakeCause Power_GetWakeCause() {
 
 void Power_DeepSleep(uint32_t seconds) {
   // 锁定 LCD 引脚电平,保证深睡期间面板供电/控制脚不漂移,画面由 ST7305 LPM 自持
-  for (int pin : lcdPins) gpio_hold_en((gpio_num_t)pin);
-  gpio_deep_sleep_hold_en();
-
   // KEY 低电平唤醒:EXT0 单引脚方式,完整走 RTC GPIO 初始化
   // (板上 KEY=GPIO18 有外部 10K 上拉,内部上拉只是兜底)
+  // GPIO0/BOOT 是 strap 引脚,严禁配置为唤醒源(唤醒复位采样时按住会进下载模式)
   ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init((gpio_num_t)PIN_KEY));
   ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction((gpio_num_t)PIN_KEY, RTC_GPIO_MODE_INPUT_ONLY));
   ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en((gpio_num_t)PIN_KEY));
   ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY));
+
+  // 等按键松开再入睡(RTC 域读),避免手还按着立即重复唤醒
+  uint32_t t0 = millis();
+  while (rtc_gpio_get_level((gpio_num_t)PIN_KEY) == 0 && millis() - t0 < 3000) delay(10);
+
+  for (int pin : lcdPins) gpio_hold_en((gpio_num_t)pin);
+  gpio_deep_sleep_hold_en();
+
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
   esp_err_t err = esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_KEY, 0);
-
-  // BOOT 键(GPIO0,外部上拉)作为同步键,走 EXT1(ANY_LOW)
-  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init(GPIO_NUM_0));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction(GPIO_NUM_0, RTC_GPIO_MODE_INPUT_ONLY));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en(GPIO_NUM_0));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis(GPIO_NUM_0));
-  esp_err_t err1 = esp_sleep_enable_ext1_wakeup(1ULL << 0, ESP_EXT1_WAKEUP_ANY_LOW);
-  log_i("ext0(key18) err=%d | ext1(boot0) err=%d", err, err1);
+  log_i("ext0(key18) err=%d lvl=%d", err, rtc_gpio_get_level((gpio_num_t)PIN_KEY));
 
   esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
   esp_deep_sleep_start();

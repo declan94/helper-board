@@ -222,26 +222,43 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
   lv_obj_align(sync, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
 }
 
-void Ui_RenderAll(DisplayPort *port, const UiModel *m) {
-  sPort = port;
-  lv_init();
-  lv_tick_set_cb([]() -> uint32_t { return millis(); });
+static lv_display_t *sDisp = NULL;
 
-  lv_display_t *disp = lv_display_create(LCD_WIDTH, LCD_HEIGHT);
-  lv_display_set_flush_cb(disp, flushCb);
-  size_t bufSize = LCD_WIDTH * LCD_HEIGHT * 2;  // RGB565 全帧
-  uint8_t *buf = (uint8_t *)heap_caps_malloc(bufSize, MALLOC_CAP_SPIRAM);
-  assert(buf);
-  lv_display_set_buffers(disp, buf, NULL, bufSize, LV_DISPLAY_RENDER_MODE_FULL);
-
+// lv_init + display 注册只做一次;每次渲染前清空重建屏幕内容
+static lv_obj_t *uiBegin() {
+  if (!sDisp) {
+    lv_init();
+    lv_tick_set_cb([]() -> uint32_t { return millis(); });
+    sDisp = lv_display_create(LCD_WIDTH, LCD_HEIGHT);
+    lv_display_set_flush_cb(sDisp, flushCb);
+    size_t bufSize = LCD_WIDTH * LCD_HEIGHT * 2;  // RGB565 全帧
+    uint8_t *buf = (uint8_t *)heap_caps_malloc(bufSize, MALLOC_CAP_SPIRAM);
+    assert(buf);
+    lv_display_set_buffers(sDisp, buf, NULL, bufSize, LV_DISPLAY_RENDER_MODE_FULL);
+  }
   lv_obj_t *scr = lv_screen_active();
+  lv_obj_clean(scr);
   lv_obj_set_style_bg_color(scr, lv_color_white(), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  return scr;
+}
+
+void Ui_Splash(DisplayPort *port, const char *text) {
+  sPort = port;
+  lv_obj_t *scr = uiBegin();
+  lv_obj_t *label = mkLabel(scr, &font_cjk_22, text);
+  lv_obj_center(label);
+  lv_refr_now(sDisp);
+}
+
+void Ui_RenderAll(DisplayPort *port, const UiModel *m) {
+  sPort = port;
+  lv_obj_t *scr = uiBegin();
 
   buildStatusBar(scr, m);
   buildTabs(scr, m->page);
   buildContent(scr, m);
   buildFooter(scr, m);
 
-  lv_refr_now(disp);  // 同步渲染并触发 flush → 上屏
+  lv_refr_now(sDisp);  // 同步渲染并触发 flush → 上屏
 }

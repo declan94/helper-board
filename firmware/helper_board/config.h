@@ -10,7 +10,8 @@
 #define PIN_I2C_SDA 13
 #define PIN_I2C_SCL 14
 
-#define PIN_KEY 18       // KEY 键:切页(EXT0 唤醒);BOOT 键 GPIO0:强制同步(EXT1 唤醒)
+#define PIN_KEY 18       // KEY 键:短按切页,长按强制同步(EXT0 唤醒 + RTC 域读电平)
+                         // BOOT(GPIO0)是 strap 引脚,不可用作运行期按键
 #define PIN_BAT_ADC 4    // ADC1_CH3,电池电压经 1/3 分压
 
 #define LCD_WIDTH 400    // 横屏
@@ -32,6 +33,7 @@
 
 #define WIFI_CONNECT_TIMEOUT_MS 12000
 #define SNTP_TIMEOUT_MS 8000
+#define KEY_LONGPRESS_MS 700  // 按住超过该时长视为长按;计时从唤醒后代码就绪开始,手感 ≈ +1s
 
 // ===== 传感器 =====
 #define TEMP_OFFSET_C 0.0f  // SHTC3 自发热补偿(常亮工况官方用 4.0,深睡工况几乎无自热)
