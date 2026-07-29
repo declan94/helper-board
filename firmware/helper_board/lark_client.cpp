@@ -64,6 +64,9 @@ void Net_BeginConnect() {
   sBeginCalled = true;
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  // 降低发射功率,削减射频电流尖峰(与屏幕升压叠加疑似触发掉电复位);
+  // 家用距离 11dBm 足够,连接不稳可逐级调回 WIFI_POWER_19_5dBm
+  WiFi.setTxPower(WIFI_POWER_11dBm);
 }
 
 static bool connectWifi() {

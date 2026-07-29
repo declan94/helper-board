@@ -12,6 +12,8 @@
 #include "lark_client.h"
 #include "ui.h"
 
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);  // TLS 握手 + UI 模型栈开销,默认 8KB 偏紧
+
 // KEY 切页后的临时页面;-1 表示跟随时段默认页。定时唤醒时清除。
 RTC_DATA_ATTR static int8_t sPageOverride = -1;
 RTC_DATA_ATTR static uint32_t sWakeCount = 0;  // 唤醒计数(诊断用,断电清零)
@@ -35,16 +37,16 @@ void setup() {
   tzset();
   Sensors_Init();
 
-  // 需要联网的唤醒先异步发起 WiFi(不阻塞),与屏幕初始化并行,
-  // 保证 WiFi 在干净的启动状态下最先启动
-  if (wake != WAKE_KEY_PAGE) Net_BeginConnect();
-
   // 屏幕尽早初始化:冷启动联网可达 20+ 秒,先给出可见反馈,
   // 否则按 PWR 开机后长时间黑屏会被误认为没开机
   display = new DisplayPort(PIN_LCD_MOSI, PIN_LCD_SCK, PIN_LCD_DC, PIN_LCD_CS,
                             PIN_LCD_RST, LCD_WIDTH, LCD_HEIGHT);
   display->RLCD_Init(wake == WAKE_COLD);
   if (wake == WAKE_COLD) Ui_Splash(display, "Starting...");
+
+  // WiFi 在屏幕初始化完成后再异步发起:屏幕升压/初始化与射频校准的
+  // 电流尖峰错开,避免叠加触发掉电复位
+  if (wake != WAKE_KEY_PAGE) Net_BeginConnect();
 
   // 硬件 RTC → 系统时间
   struct tm rtcTm;

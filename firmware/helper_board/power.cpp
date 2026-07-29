@@ -17,11 +17,13 @@ WakeCause Power_GetWakeCause() {
       return WAKE_TIMER;
     case ESP_SLEEP_WAKEUP_EXT0:
     case ESP_SLEEP_WAKEUP_EXT1: {
-      // 用 EXT1 状态寄存器精确区分按键(唤醒原因码在本板上不可靠)
+      // 用 EXT1 状态寄存器区分按键(唤醒原因码在本板上不可靠)。
+      // 实测:KEY(GPIO18)按下时 bit0 置位,BOOT(GPIO0)按下时不置位,
+      // 与配置(EXT1 mask=bit0=GPIO0)相反——机制成谜,按实测映射。
       uint64_t ext1 = esp_sleep_get_ext1_wakeup_status();
       log_i("ext1 status=%llx", ext1);
-      if (ext1 & 1ULL) return WAKE_KEY_SYNC;  // BOOT(GPIO0)
-      return WAKE_KEY_PAGE;                   // KEY(GPIO18)
+      if (ext1 & 1ULL) return WAKE_KEY_PAGE;  // KEY(GPIO18)
+      return WAKE_KEY_SYNC;                   // BOOT(GPIO0)
     }
     default:
       return WAKE_COLD;
