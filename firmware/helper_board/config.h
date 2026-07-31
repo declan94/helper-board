@@ -21,11 +21,11 @@
 #define NTP_SERVER1 "pool.ntp.org"
 #define NTP_SERVER2 "time.cloudflare.com"
 
-// 默认餐次时段(小时,含起点不含终点): [5,10)早 [10,15.5)午 [15.5,20.5)晚 [20.5,~)明日预览
+// 默认餐次时段(含起点不含终点): [5:00,9:00)早 [9:00,13:00)午 [13:00,19:30)晚 [19:30,~)明日预览
 #define MEAL_BREAKFAST_START_MIN (5 * 60)
-#define MEAL_LUNCH_START_MIN (10 * 60)
-#define MEAL_DINNER_START_MIN (15 * 60 + 30)
-#define TOMORROW_PREVIEW_START_MIN (20 * 60 + 30)
+#define MEAL_LUNCH_START_MIN (9 * 60)
+#define MEAL_DINNER_START_MIN (13 * 60)
+#define TOMORROW_PREVIEW_START_MIN (19 * 60 + 30)
 
 // ===== 唤醒与同步策略 =====
 #define WAKE_INTERVAL_SEC (30 * 60)   // 定时唤醒周期,每次唤醒都联网同步菜单
