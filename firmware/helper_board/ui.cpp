@@ -128,6 +128,37 @@ static void buildTabs(lv_obj_t *scr, MenuPage active) {
   }
 }
 
+// 正文区:上边贴着页签下沿(56+34=90),下边留出页脚(底部 16px 一行 = 272 起)
+#define CONTENT_TOP 98
+#define CONTENT_H 170
+#define CONTENT_W (LCD_WIDTH - 48)
+#define CONTENT_X 24
+
+// 字号阶梯(由大到小)。LVGL 文本高度 = n*(line_height+line_space) - line_space,
+// 按 CONTENT_H=170 算整行容量:22px→5 行,19px→6 行,16px→7 行,13px→9 行
+struct FontStep {
+  const lv_font_t *font;
+  int lineSpace;
+  int mealGap;  // "明日"页餐与餐之间的间距
+};
+static const FontStep FONT_STEPS[] = {
+  { &font_cjk_22, 4, 12 },
+  { &font_cjk_19, 3, 10 },
+  { &font_cjk_16, 3, 10 },
+  { &font_cjk_13, 2, 6 },
+};
+static const int FONT_STEP_COUNT = sizeof(FONT_STEPS) / sizeof(FONT_STEPS[0]);
+
+// 按某一档位排版标签,返回换行后的实际高度
+static int measureAtStep(lv_obj_t *label, int step) {
+  lv_obj_set_style_text_font(label, FONT_STEPS[step].font, 0);
+  lv_obj_set_style_text_line_space(label, FONT_STEPS[step].lineSpace, 0);
+  lv_obj_set_width(label, CONTENT_W);
+  lv_obj_set_height(label, LV_SIZE_CONTENT);
+  lv_obj_update_layout(label);
+  return lv_obj_get_height(label);
+}
+
 static void buildContent(lv_obj_t *scr, const UiModel *m) {
   char body[720];
 
@@ -137,22 +168,33 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
       lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);
       return;
     }
-    // 三餐各一个标签:餐内换行紧凑,餐与餐之间留半行(约 10px)
+    // 三餐各一个标签:餐内换行紧凑,餐与餐之间留半行
     static const char *NAMES[3] = { "Breakfast", "Lunch", "Dinner" };
     const char *meals[3] = { m->menu.tomorrow.breakfast, m->menu.tomorrow.lunch,
                              m->menu.tomorrow.dinner };
-    int y = 102;
+    lv_obj_t *labels[3];
     for (int i = 0; i < 3; i++) {
       char inlined[300];
       inlineMeal(meals[i], inlined, sizeof(inlined));
       snprintf(body, sizeof(body), "%s: %s", NAMES[i], inlined);
-      lv_obj_t *label = mkLabel(scr, &font_cjk_16, body);
-      lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-      lv_obj_set_width(label, LCD_WIDTH - 48);
-      lv_obj_set_style_text_line_space(label, 2, 0);
-      lv_obj_set_pos(label, 24, y);
-      lv_obj_update_layout(label);
-      y += lv_obj_get_height(label) + 10;
+      labels[i] = mkLabel(scr, &font_cjk_16, body);
+      lv_label_set_long_mode(labels[i], LV_LABEL_LONG_WRAP);
+    }
+    // 三餐合起来自适应:含餐间间距的总高必须落进正文区(预览页起始档就用 16px)
+    int step = 2, heights[3];
+    for (;;) {
+      int total = FONT_STEPS[step].mealGap * 2;
+      for (int i = 0; i < 3; i++) {
+        heights[i] = measureAtStep(labels[i], step);
+        total += heights[i];
+      }
+      if (total <= CONTENT_H || step >= FONT_STEP_COUNT - 1) break;
+      step++;
+    }
+    int y = CONTENT_TOP;
+    for (int i = 0; i < 3; i++) {
+      lv_obj_set_pos(labels[i], CONTENT_X, y);
+      y += heights[i] + FONT_STEPS[step].mealGap;
     }
     return;
   }
@@ -172,17 +214,21 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
     strlcpy(text, m->menu.today.valid ? "This meal is not filled in" : "No menu for today yet",
             sizeof(text));
 
-  // 22px + 行距 4:内容区可容纳 5 行整行,超出部分裁剪以保护页脚
   lv_obj_t *label = mkLabel(scr, &font_cjk_22, text);
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_line_space(label, 4, 0);
-  if (has) {
-    lv_obj_set_size(label, LCD_WIDTH - 48, 164);  // 固定高度,超出自动裁剪
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 24, 102);
-  } else {
-    lv_obj_set_width(label, LCD_WIDTH - 48);
+  if (!has) {
+    lv_obj_set_style_text_line_space(label, 4, 0);
+    lv_obj_set_width(label, CONTENT_W);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 20);  // 占位提示居中
+    return;
   }
+
+  // 菜品多时逐档缩字号:22px(≤5 行)→ 19px(6 行)→ 16px → 13px。
+  // 最小档仍放不下则固定高度裁剪,保证不压到页脚
+  int step = 0;
+  while (measureAtStep(label, step) > CONTENT_H && step < FONT_STEP_COUNT - 1) step++;
+  lv_obj_set_size(label, CONTENT_W, CONTENT_H);
+  lv_obj_align(label, LV_ALIGN_TOP_LEFT, CONTENT_X, CONTENT_TOP);
 }
 
 static void buildFooter(lv_obj_t *scr, const UiModel *m) {

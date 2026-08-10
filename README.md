@@ -32,7 +32,7 @@
 arduino-cli core install esp32:esp32 \
   --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
-# 1. 生成中文字库(首次;GB2312 全字集 × 3 字号,产物已可复用)
+# 1. 生成中文字库(首次;GB2312 全字集 × 5 字号,产物已可复用)
 ./tools/gen_fonts.sh
 
 # 2. 配置 Lark 应用与表格 → 见 docs/lark-setup.md

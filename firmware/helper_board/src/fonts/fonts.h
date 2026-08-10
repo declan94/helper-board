@@ -2,6 +2,8 @@
 #pragma once
 #include <lvgl.h>
 
+LV_FONT_DECLARE(font_cjk_13);
 LV_FONT_DECLARE(font_cjk_16);
+LV_FONT_DECLARE(font_cjk_19);
 LV_FONT_DECLARE(font_cjk_22);
 LV_FONT_DECLARE(font_cjk_30);

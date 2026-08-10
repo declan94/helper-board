@@ -64,7 +64,9 @@ gen() {
   ls -lh "$OUT_DIR/$name.c" | awk '{print "  ->", $9, $5}'
 }
 
+gen 13 font_cjk_13
 gen 16 font_cjk_16
+gen 19 font_cjk_19
 gen 22 font_cjk_22
 gen 30 font_cjk_30
 echo "完成。"
