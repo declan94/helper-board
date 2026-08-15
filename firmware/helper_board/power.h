@@ -11,9 +11,9 @@ typedef enum {
   WAKE_KEY_SYNC,  // BOOT 键(GPIO0):强制同步
 } WakeCause;
 
-// 按键分辨不依赖唤醒原因码(实测本板 EXT0/EXT1 上报与配置相反),
-// 而是读 EXT1 状态寄存器:bit0 置位 = BOOT(GPIO0)触发,否则为 KEY。
-// 深睡唤醒走 ROM 快速路径不采样 strap,BOOT 用作唤醒键安全(实测)。
+// 按键分辨不依赖唤醒原因码(本板上报不可靠),而是读 EXT1 状态寄存器:
+// bit0 置位 = KEY 键(接 GPIO0,走 EXT1)→ 切页;否则为 BOOT 键(接 GPIO18,走 EXT0)→ 同步。
+// 按键与 GPIO 的对应和常量名相反,详见 config.h 的告示。
 WakeCause Power_GetWakeCause();
 
 // 运行期读 KEY(GPIO18)是否按下。深睡唤醒后数字域 digitalRead 不可靠(hold/功能域),

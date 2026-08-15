@@ -10,7 +10,13 @@
 #define PIN_I2C_SDA 13
 #define PIN_I2C_SCL 14
 
-#define PIN_KEY 18       // KEY 键:切页(EXT0);BOOT 键 GPIO0:强制同步(EXT1,按状态寄存器分辨)
+// 两个按键。2026-08-15 用响铃时的屏幕诊断实测确认对应关系(此前一直记反,
+// 并因此在 power.cpp 留下过一条"机制成谜"的注释):
+//   按 KEY 键  → 拉低 GPIO0  → 走 EXT1 唤醒 → 切页
+//   按 BOOT 键 → 拉低 GPIO18 → 走 EXT0 唤醒 → 强制同步
+// BOOT 同时是进下载模式用的那个键。两者均低有效、外部 10K 上拉。
+#define PIN_BTN_KEY 0    // 切页
+#define PIN_BTN_BOOT 18  // 强制同步
 #define PIN_BAT_ADC 4    // ADC1_CH3,电池电压经 1/3 分压
 
 // 板载音频(取自官方 07_Audio_Test 的板级配置 S3_RLCD_4_2)。
@@ -41,14 +47,25 @@
 // 唤醒周期由呼叫轮询决定(见下方 CALL_POLL_INTERVAL_SEC),菜单同步搭它的顺风车:
 // 每 SYNC_EVERY_N_POLLS 次轮询做一次完整 Lark 同步。
 
-#define WIFI_CONNECT_TIMEOUT_MS 12000
+// 发射功率:压低是为了削减射频电流尖峰(与屏幕升压叠加疑似触发过掉电复位)。
+// 若日志频繁出现 AUTH_EXPIRE / HANDSHAKE_TIMEOUT,说明 11dBm 对你家距离偏弱,
+// 逐级往上调 WIFI_POWER_13dBm / 15dBm / 19_5dBm。
+// 2026-08-15:11dBm 下连续多次冷启动握手超时(AUTH_EXPIRE / HANDSHAKE_TIMEOUT),
+// 板子离路由器较远,上调到 15dBm。若仍不稳可再上 19_5dBm,但要留意掉电复位
+// (当初压到 11dBm 就是为了避开射频尖峰与屏幕升压叠加)。
+#define WIFI_TX_POWER WIFI_POWER_15dBm
+
+// 握手超时(HANDSHAKE_TIMEOUT)多为偶发,同样的时间预算拆成两次尝试比死等一次更容易成功。
+// 每次尝试之间会彻底断开重来,而不是对着一个卡住的连接继续等。
+#define WIFI_CONNECT_ATTEMPTS 2
+#define WIFI_CONNECT_TIMEOUT_MS 7000  // 单次尝试的超时(总预算 ≈ 2×7s,与原来的 12s 相当)
 #define WIFI_FAST_CONNECT_TIMEOUT_MS 4000  // 定向连接(已知 BSSID+信道)正常 1 秒内完成,超时即回落
 #define SNTP_TIMEOUT_MS 8000
 
 // ===== 呼叫(ntfy)=====
 #define CALL_POLL_INTERVAL_SEC 600      // 呼叫轮询周期。改小 = 更及时更费电(5 分钟约多耗 0.24mA)
 #define SYNC_EVERY_N_POLLS 3            // 每 N 次轮询顺带做一次完整 Lark 同步(3×10min = 30min)
-#define CALL_RING_MAX_LOOPS 8           // 铃声最多循环遍数(单遍约 3.4s),按 KEY 可提前停
+#define CALL_RING_MAX_LOOPS 4           // 铃声最多循环遍数(单遍约 3.4s),按 KEY 可提前停
 #define CALL_HTTP_TIMEOUT_MS 6000
 #define CALL_CHANNEL_STALE_SEC (2 * 3600)  // 呼叫通道多久没通就在页脚报警
 

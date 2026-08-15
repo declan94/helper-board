@@ -26,12 +26,15 @@ WakeCause Power_GetWakeCause() {
     case ESP_SLEEP_WAKEUP_EXT0:
     case ESP_SLEEP_WAKEUP_EXT1: {
       // 用 EXT1 状态寄存器区分按键(唤醒原因码在本板上不可靠)。
-      // 实测:KEY(GPIO18)按下时 bit0 置位,BOOT(GPIO0)按下时不置位,
-      // 与配置(EXT1 mask=bit0=GPIO0)相反——机制成谜,按实测映射。
+      // 2026-08-15 查明按键与引脚的真实对应后,这里其实完全自洽:
+      //   按 KEY  → 拉低 GPIO0  → EXT1(mask=bit0=GPIO0)触发 → bit0 置位
+      //   按 BOOT → 拉低 GPIO18 → EXT0 触发                 → ext1 状态为 0
+      // (旧注释说"与配置相反、机制成谜",是因为把 KEY 当成了 GPIO18。
+      //  行为一直是对的,错的只是理由。引脚对应详见 config.h 的告示。)
       uint64_t ext1 = esp_sleep_get_ext1_wakeup_status();
       log_i("ext1 status=%llx", ext1);
-      if (ext1 & 1ULL) return WAKE_KEY_PAGE;  // KEY(GPIO18)
-      return WAKE_KEY_SYNC;                   // BOOT(GPIO0)
+      if (ext1 & 1ULL) return WAKE_KEY_PAGE;  // KEY 键(GPIO0):切页
+      return WAKE_KEY_SYNC;                   // BOOT 键(GPIO18):强制同步
     }
     default:
       return WAKE_COLD;
@@ -40,22 +43,35 @@ WakeCause Power_GetWakeCause() {
 
 bool Power_KeyPressed() {
   static bool inited = false;
+  static bool wasPressed = false;
   if (!inited) {
-    // 深睡前已经配过一次,冷启动路径没有;重复 init 无害
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init((gpio_num_t)PIN_KEY));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction((gpio_num_t)PIN_KEY, RTC_GPIO_MODE_INPUT_ONLY));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en((gpio_num_t)PIN_KEY));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY));
+    // 必须先把两个脚从 RTC 域交还数字域再读:一个 pad 同时只能挂一个 MUX,深睡期间
+    // 它们归 RTC 域(EXT0/EXT1 唤醒要用),留在那儿的话运行期 rtc_gpio_get_level
+    // 恒返回"未按下"—— 这正是响铃时按键失灵的真因。
+    // 入睡时 Power_DeepSleep 会重新 rtc_gpio_init,EXT0/EXT1 唤醒不受影响。
+    // 两个键都读:停铃这种场合,按哪个都该管用。
+    for (gpio_num_t p : { (gpio_num_t)PIN_BTN_KEY, (gpio_num_t)PIN_BTN_BOOT }) {
+      ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_deinit(p));
+      pinMode(p, INPUT_PULLUP);
+    }
     inited = true;
+    log_i("按键运行期读取就绪: KEY(G%d)=%d BOOT(G%d)=%d (静息电平应均为 1)", PIN_BTN_KEY,
+          digitalRead(PIN_BTN_KEY), PIN_BTN_BOOT, digitalRead(PIN_BTN_BOOT));
   }
-  return rtc_gpio_get_level((gpio_num_t)PIN_KEY) == 0;  // 低有效
+  bool key = digitalRead(PIN_BTN_KEY) == LOW;  // 低有效
+  bool boot = digitalRead(PIN_BTN_BOOT) == LOW;
+  bool pressed = key || boot;
+  if (pressed && !wasPressed)
+    log_i("按键按下: %s%s", key ? "KEY " : "", boot ? "BOOT" : "");
+  wasPressed = pressed;
+  return pressed;
 }
 
 void Power_DeepSleep(uint32_t seconds) {
   // 锁定 LCD 引脚电平,保证深睡期间面板供电/控制脚不漂移,画面由 ST7305 LPM 自持
-  // 两个按键均低有效、外部 10K 上拉:KEY(GPIO18)走 EXT0,BOOT(GPIO0)走 EXT1。
-  // 深睡唤醒走 ROM 快速路径不采样 strap,BOOT 作唤醒键安全(实测多次)。
-  const gpio_num_t keys[] = { (gpio_num_t)PIN_KEY, GPIO_NUM_0 };
+  // 两个按键均低有效、外部 10K 上拉:GPIO18(BOOT 键)走 EXT0,GPIO0(KEY 键)走 EXT1。
+  // 深睡唤醒走 ROM 快速路径不采样 strap,GPIO0 作唤醒键安全(实测多次)。
+  const gpio_num_t keys[] = { (gpio_num_t)PIN_BTN_KEY, (gpio_num_t)PIN_BTN_BOOT };
   for (gpio_num_t k : keys) {
     ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init(k));
     ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction(k, RTC_GPIO_MODE_INPUT_ONLY));
@@ -65,7 +81,7 @@ void Power_DeepSleep(uint32_t seconds) {
 
   // 等按键松开再入睡(RTC 域读),避免手还按着立即重复唤醒
   uint32_t t0 = millis();
-  while ((rtc_gpio_get_level((gpio_num_t)PIN_KEY) == 0 || rtc_gpio_get_level(GPIO_NUM_0) == 0)
+  while ((rtc_gpio_get_level((gpio_num_t)PIN_BTN_KEY) == 0 || rtc_gpio_get_level((gpio_num_t)PIN_BTN_BOOT) == 0)
          && millis() - t0 < 3000)
     delay(10);
 
@@ -77,9 +93,9 @@ void Power_DeepSleep(uint32_t seconds) {
   gpio_deep_sleep_hold_en();
 
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-  esp_err_t err0 = esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_KEY, 0);
-  esp_err_t err1 = esp_sleep_enable_ext1_wakeup(1ULL << 0, ESP_EXT1_WAKEUP_ANY_LOW);
-  log_i("ext0(key18) err=%d | ext1(boot0) err=%d", err0, err1);
+  esp_err_t err0 = esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_BTN_BOOT, 0);
+  esp_err_t err1 = esp_sleep_enable_ext1_wakeup(1ULL << PIN_BTN_KEY, ESP_EXT1_WAKEUP_ANY_LOW);
+  log_i("ext0(BOOT,G18) err=%d | ext1(KEY,G0) err=%d", err0, err1);
 
   esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
   esp_deep_sleep_start();

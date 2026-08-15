@@ -34,6 +34,9 @@ RTC_DATA_ATTR static time_t sCallChannelOkAt = 0;  // 最近一次轮询成功,�
 
 static DisplayPort *display = NULL;
 
+// 本次唤醒待发的回执内容(空 = 没有)。只在一次唤醒内有效,不必进 RTC 内存。
+static char sPendingAck[96] = { 0 };
+
 static uint32_t secondsToNextWake(time_t now, bool timeValid) {
   if (!timeValid) return 300;  // 时间未知:5 分钟后重试同步
   uint32_t rem = CALL_POLL_INTERVAL_SEC - (uint32_t)(now % CALL_POLL_INTERVAL_SEC);
@@ -43,22 +46,34 @@ static uint32_t secondsToNextWake(time_t now, bool timeValid) {
 
 // 响铃:留言上屏 → 循环播放直到按 KEY 或到次数上限 → 回执。
 // 返回是否被按键确认(false = 响完了没人理,留言继续占屏)。
+// 停铃判定:只认"松开之后的新按下"。唤醒本身就是按键触发的(按 BOOT 强制同步时
+// 手还按在键上),若直接看电平,铃会在响起的一瞬间被自己的唤醒按键掐掉 —— 实测
+// 烧录后按住 BOOT 的那次就是 20ms 内 loops=0,一遍都没播出来。
+static bool ringAbort() {
+  static bool sawRelease = false;
+  if (!Power_KeyPressed()) {
+    sawRelease = true;
+    return false;
+  }
+  return sawRelease;
+}
+
 static bool ringForCall(const CallMessage *call, bool timeValid) {
   Ui_CallScreen(display, call->text, call->sentAt, timeValid);
 
   bool audioOk = Audio_Init();
-  int loops = audioOk ? Audio_PlayRingtone(CALL_RING_MAX_LOOPS, Power_KeyPressed) : 0;
+  int loops = audioOk ? Audio_PlayRingtone(CALL_RING_MAX_LOOPS, ringAbort) : 0;
   Audio_Deinit();
   // 播满上限 = 没人按;提前返回 = 被 Power_KeyPressed 中止。
   // 音频起不来时一律按"没确认"处理,至少让留言留在屏幕上。
   bool acked = audioOk && loops < CALL_RING_MAX_LOOPS;
   log_i("call: audio=%d loops=%d acked=%d text=%s", audioOk, loops, acked, call->text);
 
-  char detail[96];
-  if (!audioOk) snprintf(detail, sizeof(detail), "Delivered to screen, but audio failed");
-  else if (acked) snprintf(detail, sizeof(detail), "Heard and acknowledged (rang %dx)", loops);
-  else snprintf(detail, sizeof(detail), "Rang %dx, nobody pressed the key yet", loops);
-  Call_SendAck(detail);
+  // 只把回执内容备好,不在这里发:响铃期间功放拉电流叠加射频,连接可能已经掉了,
+  // 而且此刻发会拖慢屏幕回到菜单。统一挪到渲染之后、重新确认连接再发。
+  if (!audioOk) snprintf(sPendingAck, sizeof(sPendingAck), "Delivered to screen, but audio failed");
+  else if (acked) snprintf(sPendingAck, sizeof(sPendingAck), "Heard and acknowledged (rang %dx)", loops);
+  else snprintf(sPendingAck, sizeof(sPendingAck), "Rang %dx, nobody pressed the key yet", loops);
   return acked;
 }
 
@@ -80,22 +95,21 @@ void setup() {
   if (wake == WAKE_COLD) Ui_Splash(display, "Starting...");
 
 #if AUDIO_SELFTEST
-  // 音频链路自检:冷启动直接响两遍,按 KEY 提前停。验完把 config.h 里的开关改回 0。
+  // 音频链路自检:冷启动直接响两遍,按任一键提前停。验完把 config.h 的开关改回 0。
   // 刻意排在 Net_BeginConnect 之前:射频不开,把"功放电流尖峰"这一个变量单独隔离出来。
-  // 分阶段打日志:万一响铃时掉电复位,从日志断在哪一行就能判断是初始化还是播放的问题。
+  // 结果同时打到屏幕上 —— 烧录后 USB CDC 重新枚举要好几秒,开机头约 10 秒的串口
+  // 输出会整段丢失(实测丢过两次),只靠串口容易白跑一趟。
   if (wake == WAKE_COLD) {
-    Ui_Splash(display, "Audio test...");
-    log_i("selftest: init begin");
-    Serial.flush();
+    Ui_Splash(display, "Audio test: press a key to stop");
     bool audioOk = Audio_Init();
-    log_i("selftest: init=%d, play begin", audioOk);
-    Serial.flush();
-    int loops = audioOk ? Audio_PlayRingtone(2, Power_KeyPressed) : 0;
-    log_i("selftest: play done, loops=%d", loops);
-    Serial.flush();
+    int loops = audioOk ? Audio_PlayRingtone(2, ringAbort) : 0;
     Audio_Deinit();
-    log_i("selftest: PASS=%d (init=%d loops=%d)", audioOk && loops > 0, audioOk, loops);
-    Serial.flush();
+    log_i("selftest: init=%d loops=%d", audioOk, loops);
+
+    char diag[96];
+    snprintf(diag, sizeof(diag), "audio init: %s\nloops: %d/2", audioOk ? "OK" : "FAILED", loops);
+    Ui_Splash(display, diag);
+    delay(6000);
   }
 #endif
 
@@ -121,6 +135,9 @@ void setup() {
       needCallPoll = true;
       sPageOverride = -1;
       sCallLatched = false;
+      // 通道健康的 2 小时计时从开机起算,而不是从 epoch 0 起算 —— 否则开机后
+      // 首次轮询成功之前,页脚必然毫无根据地报 CALL OFFLINE
+      if (timeValid) sCallChannelOkAt = time(NULL);
       break;
     case WAKE_KEY_SYNC:  // BOOT 键:强制同步
       needSync = true;
@@ -175,9 +192,6 @@ void setup() {
     }
   }
 
-  // 留言占屏期间按 KEY 确认:补一条回执,让呼叫方知道人终于看到了
-  if (ackLatchedCall && Net_WaitConnected()) Call_SendAck("Seen (acknowledged later at the board)");
-
   // ---- 联网同步 ----
   if (needSync) {
     m.syncAttempted = true;
@@ -217,7 +231,10 @@ void setup() {
     }
     log_i("sync: wifi=%d time=%d fetch=%d", r.wifiOk, r.timeOk, r.fetchOk);
   }
-  Net_Disconnect();  // 查呼叫、回执、同步都可能开过射频,统一在这里关
+  // 常规路径的网络活动到此为止,先关射频再渲染 —— 渲染要一两秒,不该让射频陪着开。
+  // 有回执要发的路径例外:回执统一排到渲染之后,见下面。
+  bool ackAfterRender = ackLatchedCall || sPendingAck[0];
+  if (!ackAfterRender) Net_Disconnect();
 
   // ---- 页面决策 ----
   localtime_r(&now, &m.now);
@@ -244,6 +261,19 @@ void setup() {
   if (sCallLatched) Ui_CallScreen(display, sCallText, sCallSentAt, timeValid);
   else Ui_RenderAll(display, &m);
   display->RLCD_EnterLowPower();
+
+  // 回执一律排在渲染之后:按键的人要立刻看到屏幕变化,不该先干等 HTTPS POST。
+  // 发之前重新确认连接 —— 响铃那十几秒里射频可能已经掉线,这是回执发不出去的
+  // 头号嫌疑(实测遇到过一次响铃正常、回执无声无息丢失)。
+  if (ackAfterRender) {
+    if (Net_WaitConnected()) {
+      if (sPendingAck[0]) Call_SendAck(sPendingAck);
+      if (ackLatchedCall) Call_SendAck("Seen (acknowledged later at the board)");
+    } else {
+      log_e("回执发不出:射频未连上");
+    }
+    Net_Disconnect();
+  }
 
   now = time(NULL);
   Power_DeepSleep(secondsToNextWake(now, timeValid));

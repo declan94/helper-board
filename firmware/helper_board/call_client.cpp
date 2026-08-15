@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -108,16 +109,28 @@ bool Call_Poll(CallMessage *out) {
 void Call_SendAck(const char *detail) {
   String url = String(NTFY_BASE_URL) + "/" + NTFY_TOPIC_ACK;
 
-  WiFiClientSecure client;
-  client.setCACert(NTFY_CA_ROOT);
-  HTTPClient http;
-  http.setTimeout(CALL_HTTP_TIMEOUT_MS);
-  if (!http.begin(client, url)) return;
-  applyAuth(http);
-  http.addHeader("Title", "Helper board");
-  http.addHeader("Tags", "white_check_mark");
+  // 重试一次:回执紧跟在响铃之后,而响铃期间功放拉电流叠加射频,连接可能已经掉了。
+  // 一次重试足以覆盖"刚掉线、驱动正在自动重连"的窗口;再失败就放弃,不拖住入睡。
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    log_i("ntfy ack 尝试 %d: wifi=%d heap=%u", attempt, (int)WiFi.status(),
+          (unsigned)ESP.getFreeHeap());
 
-  int code = http.POST((uint8_t *)detail, strlen(detail));
-  http.end();
-  log_i("ntfy ack http %d: %s", code, detail);
+    WiFiClientSecure client;
+    client.setCACert(NTFY_CA_ROOT);
+    HTTPClient http;
+    http.setTimeout(CALL_HTTP_TIMEOUT_MS);
+    if (http.begin(client, url)) {
+      applyAuth(http);
+      http.addHeader("Title", "Helper board");
+      http.addHeader("Tags", "white_check_mark");
+      int code = http.POST((uint8_t *)detail, strlen(detail));
+      http.end();
+      log_i("ntfy ack http %d: %s", code, detail);
+      if (code == 200) return;
+    } else {
+      log_e("ntfy ack http.begin 失败");
+    }
+    if (attempt == 1) delay(1000);
+  }
+  log_e("ntfy ack 两次均失败,放弃");
 }
