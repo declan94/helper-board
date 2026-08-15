@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include "lark_client.h"
+#include "net.h"
 #include "sensors.h"
 #include "config.h"
 #include "secrets.h"
@@ -56,33 +57,6 @@ MrY=
 // token 缓存在 RTC 内存,深睡眠不丢,有效期内(<2h)免重复获取
 RTC_DATA_ATTR static char sTokenCache[160] = {0};
 RTC_DATA_ATTR static time_t sTokenExpiry = 0;
-
-static bool sBeginCalled = false;
-
-void Net_BeginConnect() {
-  if (sBeginCalled) return;
-  sBeginCalled = true;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  // 降低发射功率,削减射频电流尖峰(与屏幕升压叠加疑似触发掉电复位);
-  // 家用距离 11dBm 足够,连接不稳可逐级调回 WIFI_POWER_19_5dBm
-  WiFi.setTxPower(WIFI_POWER_11dBm);
-}
-
-static bool connectWifi() {
-  Net_BeginConnect();  // 若未提前发起则此刻发起
-  uint32_t t0 = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - t0 > WIFI_CONNECT_TIMEOUT_MS) return false;
-    delay(100);
-  }
-  return true;
-}
-
-void Net_Disconnect() {
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-}
 
 static bool syncTimeToRtc() {
   configTzTime(TZ_STRING, NTP_SERVER1, NTP_SERVER2);
@@ -239,7 +213,7 @@ static bool fetchMenu(const String &token, MenuData *menu) {
 
 SyncResult Lark_SyncAll(bool needTime, MenuData *menu) {
   SyncResult r = { false, false, false };
-  r.wifiOk = connectWifi();
+  r.wifiOk = Net_WaitConnected();
   if (!r.wifiOk) return r;
 
   // 只要联网就校时:修正 RTC 出厂残留值与长期漂移

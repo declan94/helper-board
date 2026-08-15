@@ -16,5 +16,9 @@ typedef enum {
 // 深睡唤醒走 ROM 快速路径不采样 strap,BOOT 用作唤醒键安全(实测)。
 WakeCause Power_GetWakeCause();
 
+// 运行期读 KEY(GPIO18)是否按下。深睡唤醒后数字域 digitalRead 不可靠(hold/功能域),
+// 一律走 RTC 域;首次调用会补做 rtc_gpio_init(冷启动时还没配过)。
+bool Power_KeyPressed();
+
 // 刷新完成后调用:面板进低功耗保持、锁定 LCD 引脚、配置唤醒源并深睡。不返回。
 void Power_DeepSleep(uint32_t seconds);

@@ -3,9 +3,17 @@
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
 #include "power.h"
+#include "audio.h"
 #include "config.h"
 
 static const int lcdPins[] = { PIN_LCD_RST, PIN_LCD_CS, PIN_LCD_DC, PIN_LCD_SCK, PIN_LCD_MOSI };
+
+// 音频引脚同样要跨深睡锁住,而且比 LCD 更要命:
+//   GPIO45(I2S WS)是 VDD_SPI strap —— 唤醒复位若采样到高电平,flash 供电会
+//     被切到 1.8V;GPIO46(功放使能)是 ROM log strap。两者的安全取值都是低,
+//     和"功放关断"恰好一致,所以统一拉低再锁。
+//   悬空的功放使能脚还会让功放随机导通,既漏电又出底噪。
+static const int audioPins[] = { PIN_AUDIO_PA, PIN_I2S_MCLK, PIN_I2S_BCLK, PIN_I2S_WS, PIN_I2S_DOUT };
 
 WakeCause Power_GetWakeCause() {
   esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
@@ -30,6 +38,19 @@ WakeCause Power_GetWakeCause() {
   }
 }
 
+bool Power_KeyPressed() {
+  static bool inited = false;
+  if (!inited) {
+    // 深睡前已经配过一次,冷启动路径没有;重复 init 无害
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_init((gpio_num_t)PIN_KEY));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_set_direction((gpio_num_t)PIN_KEY, RTC_GPIO_MODE_INPUT_ONLY));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pullup_en((gpio_num_t)PIN_KEY));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rtc_gpio_pulldown_dis((gpio_num_t)PIN_KEY));
+    inited = true;
+  }
+  return rtc_gpio_get_level((gpio_num_t)PIN_KEY) == 0;  // 低有效
+}
+
 void Power_DeepSleep(uint32_t seconds) {
   // 锁定 LCD 引脚电平,保证深睡期间面板供电/控制脚不漂移,画面由 ST7305 LPM 自持
   // 两个按键均低有效、外部 10K 上拉:KEY(GPIO18)走 EXT0,BOOT(GPIO0)走 EXT1。
@@ -48,7 +69,11 @@ void Power_DeepSleep(uint32_t seconds) {
          && millis() - t0 < 3000)
     delay(10);
 
+  // 音频链路无条件复位到静默态(哪怕这次唤醒根本没播过音),再连同 LCD 一起锁
+  Audio_IdleSafe();
+
   for (int pin : lcdPins) gpio_hold_en((gpio_num_t)pin);
+  for (int pin : audioPins) ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_hold_en((gpio_num_t)pin));
   gpio_deep_sleep_hold_en();
 
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);

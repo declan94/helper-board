@@ -177,13 +177,15 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
       char inlined[300];
       inlineMeal(meals[i], inlined, sizeof(inlined));
       snprintf(body, sizeof(body), "%s: %s", NAMES[i], inlined);
-      labels[i] = mkLabel(scr, &font_cjk_16, body);
+      labels[i] = mkLabel(scr, &font_cjk_22, body);
       lv_label_set_long_mode(labels[i], LV_LABEL_LONG_WRAP);
     }
-    // 三餐合起来自适应:含餐间间距的总高必须落进正文区(预览页起始档就用 16px)
-    int step = 2, heights[3];
+    // 三餐合起来自适应:含餐间间距的总高必须落进正文区。
+    // 和今日页一样从最大档起步——明日页的菜品被 inlineMeal 压成了段落而不是
+    // 一菜一行,内容往往只有三四行,写死从 16px 起步会白白浪费半屏。
+    int step = 0, heights[3], total = 0;
     for (;;) {
-      int total = FONT_STEPS[step].mealGap * 2;
+      total = FONT_STEPS[step].mealGap * 2;
       for (int i = 0; i < 3; i++) {
         heights[i] = measureAtStep(labels[i], step);
         total += heights[i];
@@ -191,7 +193,8 @@ static void buildContent(lv_obj_t *scr, const UiModel *m) {
       if (total <= CONTENT_H || step >= FONT_STEP_COUNT - 1) break;
       step++;
     }
-    int y = CONTENT_TOP;
+    // 余下的空白上下均分,三餐居中而不是顶头堆着、底下空一块
+    int y = CONTENT_TOP + (total < CONTENT_H ? (CONTENT_H - total) / 2 : 0);
     for (int i = 0; i < 3; i++) {
       lv_obj_set_pos(labels[i], CONTENT_X, y);
       y += heights[i] + FONT_STEPS[step].mealGap;
@@ -264,6 +267,15 @@ static void buildFooter(lv_obj_t *scr, const UiModel *m) {
   } else {
     strlcpy(stat, m->syncAttempted ? "Sync failed" : "Not synced", sizeof(stat));
   }
+  // 呼叫通道长时间没通就必须让人看见:呼叫方在外面按了铃却石沉大海是最糟的
+  // 失效方式,屏幕是唯一能让屋里的人发现并告知的渠道。
+  if (m->timeValid && m->menu.lastSync > 0) {
+    if (m->callChannelOkAt == 0 || m->nowEpoch - m->callChannelOkAt > CALL_CHANNEL_STALE_SEC) {
+      char tmp[96];
+      snprintf(tmp, sizeof(tmp), "CALL OFFLINE! %s", stat);
+      strlcpy(stat, tmp, sizeof(stat));
+    }
+  }
   if (m->batt.percent <= BAT_LOW_WARN_PCT && !m->batt.plugged) {
     char tmp[96];
     snprintf(tmp, sizeof(tmp), "LOW BATTERY! %s", stat);
@@ -299,6 +311,46 @@ void Ui_Splash(DisplayPort *port, const char *text) {
   lv_obj_t *scr = uiBegin();
   lv_obj_t *label = mkLabel(scr, &font_cjk_22, text);
   lv_obj_center(label);
+  lv_refr_now(sDisp);
+}
+
+void Ui_CallScreen(DisplayPort *port, const char *text, time_t sentAt, bool timeValid) {
+  sPort = port;
+  lv_obj_t *scr = uiBegin();
+
+  // 顶部:铃铛 + 发出时刻。整屏最醒目的一行。
+  char head[48];
+  if (timeValid && sentAt > 0) {
+    struct tm st;
+    localtime_r(&sentAt, &st);
+    snprintf(head, sizeof(head), LV_SYMBOL_BELL "  CALL  %02d:%02d", st.tm_hour, st.tm_min);
+  } else {
+    snprintf(head, sizeof(head), LV_SYMBOL_BELL "  CALL");
+  }
+  lv_obj_t *title = mkLabel(scr, &font_cjk_22, head);
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 22);
+
+  lv_obj_t *line = lv_obj_create(scr);
+  lv_obj_remove_style_all(line);
+  lv_obj_set_style_bg_color(line, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
+  lv_obj_set_size(line, LCD_WIDTH - 40, 2);
+  lv_obj_align(line, LV_ALIGN_TOP_MID, 0, 60);
+
+  // 正文:留言可能是中文,字库是 GB2312 全字集,直接渲染。
+  // 长留言逐档缩字号,复用正文区那套阶梯。
+  const int bodyTop = 78, bodyH = 160;
+  lv_obj_t *body = mkLabel(scr, &font_cjk_22, (text && text[0]) ? text : "(no message)");
+  lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(body, LV_TEXT_ALIGN_CENTER, 0);
+  int step = 0;
+  while (measureAtStep(body, step) > bodyH && step < FONT_STEP_COUNT - 1) step++;
+  lv_obj_set_size(body, CONTENT_W, bodyH);
+  lv_obj_align(body, LV_ALIGN_TOP_MID, 0, bodyTop);
+
+  lv_obj_t *hint = mkLabel(scr, &font_cjk_16, "Press KEY to stop the ring");
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -14);
+
   lv_refr_now(sDisp);
 }
 
